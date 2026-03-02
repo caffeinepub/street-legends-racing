@@ -19,12 +19,23 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
+export const Principal = IDL.Principal;
+export const RaceResult = IDL.Record({
+  'winnerHp' : IDL.Nat,
+  'winnerXp' : IDL.Nat,
+  'winner' : Principal,
+  'loserHp' : IDL.Nat,
+  'loserXp' : IDL.Nat,
+  'loser' : Principal,
+  'challengeId' : IDL.Nat,
+  'winnerName' : IDL.Text,
+  'loserName' : IDL.Text,
+});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const Principal = IDL.Principal;
 export const RacerProfile = IDL.Record({
   'xp' : IDL.Nat,
   'bio' : IDL.Text,
@@ -43,6 +54,7 @@ export const RaceEvent = IDL.Record({
   'challenger' : IDL.Text,
 });
 export const Car = IDL.Record({
+  'hp' : IDL.Nat,
   'model' : IDL.Text,
   'make' : IDL.Text,
   'mods' : IDL.Vec(IDL.Text),
@@ -83,6 +95,12 @@ export const Task = IDL.Record({
   'requiredCompletions' : IDL.Nat,
   'description' : IDL.Text,
 });
+export const XpEvent = IDL.Record({
+  'raceLabel' : IDL.Text,
+  'streakBonus' : IDL.Bool,
+  'timestamp' : Time,
+  'amount' : IDL.Nat,
+});
 
 export const idlService = IDL.Service({
   '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -112,12 +130,25 @@ export const idlService = IDL.Service({
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'acceptAndRaceChallenge' : IDL.Func([IDL.Nat], [RaceResult], []),
   'acceptChallenge' : IDL.Func([IDL.Nat], [], []),
+  'addXpEvent' : IDL.Func([IDL.Text, IDL.Nat, IDL.Bool], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'claimDailyChallenge' : IDL.Func([IDL.Text, IDL.Nat], [], []),
   'completeChallenge' : IDL.Func([IDL.Nat, Principal], [], []),
   'completeTask' : IDL.Func([], [RacerProfile], []),
   'createChallenge' : IDL.Func([Principal], [IDL.Nat], []),
   'createChatRoom' : IDL.Func([IDL.Text], [], []),
+  'deleteChatRoom' : IDL.Func([IDL.Text], [], []),
+  'findRandomOpponent' : IDL.Func(
+      [],
+      [
+        IDL.Opt(
+          IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+        ),
+      ],
+      [],
+    ),
   'getActivityFeed' : IDL.Func([], [IDL.Vec(RaceEvent)], ['query']),
   'getAllRacerProfiles' : IDL.Func(
       [],
@@ -131,11 +162,15 @@ export const idlService = IDL.Service({
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(RacerProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCar' : IDL.Func([Principal], [IDL.Opt(Car)], ['query']),
+  'getCarHp' : IDL.Func([Principal], [IDL.Nat], ['query']),
   'getChatMessages' : IDL.Func([IDL.Text], [IDL.Vec(ChatMessage)], ['query']),
   'getChatRooms' : IDL.Func([], [IDL.Vec(ChatRoom)], ['query']),
+  'getDailyProgress' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Nat)], ['query']),
   'getIncomingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
   'getLeaderboard' : IDL.Func([], [IDL.Vec(RacerProfile)], ['query']),
   'getOutgoingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
+  'getRoomMembers' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+  'getStreak' : IDL.Func([], [IDL.Nat], ['query']),
   'getTaskProgress' : IDL.Func(
       [],
       [
@@ -148,14 +183,26 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getUserProfile' : IDL.Func([Principal], [IDL.Opt(RacerProfile)], ['query']),
+  'getXpHistory' : IDL.Func([], [IDL.Vec(XpEvent)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'joinRoom' : IDL.Func([IDL.Text], [], []),
+  'leaveRoom' : IDL.Func([IDL.Text], [], []),
   'migrateDefaultRooms' : IDL.Func([], [], []),
   'registerCar' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text)],
+      [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text), IDL.Nat],
       [],
       [],
     ),
   'saveCallerUserProfile' : IDL.Func([RacerProfile], [], []),
+  'searchRacerByName' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Vec(
+          IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+        ),
+      ],
+      ['query'],
+    ),
   'sendChatMessage' : IDL.Func([IDL.Text, IDL.Text], [], []),
 });
 
@@ -173,12 +220,23 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
+  const Principal = IDL.Principal;
+  const RaceResult = IDL.Record({
+    'winnerHp' : IDL.Nat,
+    'winnerXp' : IDL.Nat,
+    'winner' : Principal,
+    'loserHp' : IDL.Nat,
+    'loserXp' : IDL.Nat,
+    'loser' : Principal,
+    'challengeId' : IDL.Nat,
+    'winnerName' : IDL.Text,
+    'loserName' : IDL.Text,
+  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const Principal = IDL.Principal;
   const RacerProfile = IDL.Record({
     'xp' : IDL.Nat,
     'bio' : IDL.Text,
@@ -197,6 +255,7 @@ export const idlFactory = ({ IDL }) => {
     'challenger' : IDL.Text,
   });
   const Car = IDL.Record({
+    'hp' : IDL.Nat,
     'model' : IDL.Text,
     'make' : IDL.Text,
     'mods' : IDL.Vec(IDL.Text),
@@ -237,6 +296,12 @@ export const idlFactory = ({ IDL }) => {
     'requiredCompletions' : IDL.Nat,
     'description' : IDL.Text,
   });
+  const XpEvent = IDL.Record({
+    'raceLabel' : IDL.Text,
+    'streakBonus' : IDL.Bool,
+    'timestamp' : Time,
+    'amount' : IDL.Nat,
+  });
   
   return IDL.Service({
     '_caffeineStorageBlobIsLive' : IDL.Func(
@@ -266,12 +331,25 @@ export const idlFactory = ({ IDL }) => {
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'acceptAndRaceChallenge' : IDL.Func([IDL.Nat], [RaceResult], []),
     'acceptChallenge' : IDL.Func([IDL.Nat], [], []),
+    'addXpEvent' : IDL.Func([IDL.Text, IDL.Nat, IDL.Bool], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'claimDailyChallenge' : IDL.Func([IDL.Text, IDL.Nat], [], []),
     'completeChallenge' : IDL.Func([IDL.Nat, Principal], [], []),
     'completeTask' : IDL.Func([], [RacerProfile], []),
     'createChallenge' : IDL.Func([Principal], [IDL.Nat], []),
     'createChatRoom' : IDL.Func([IDL.Text], [], []),
+    'deleteChatRoom' : IDL.Func([IDL.Text], [], []),
+    'findRandomOpponent' : IDL.Func(
+        [],
+        [
+          IDL.Opt(
+            IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+          ),
+        ],
+        [],
+      ),
     'getActivityFeed' : IDL.Func([], [IDL.Vec(RaceEvent)], ['query']),
     'getAllRacerProfiles' : IDL.Func(
         [],
@@ -285,11 +363,15 @@ export const idlFactory = ({ IDL }) => {
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(RacerProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCar' : IDL.Func([Principal], [IDL.Opt(Car)], ['query']),
+    'getCarHp' : IDL.Func([Principal], [IDL.Nat], ['query']),
     'getChatMessages' : IDL.Func([IDL.Text], [IDL.Vec(ChatMessage)], ['query']),
     'getChatRooms' : IDL.Func([], [IDL.Vec(ChatRoom)], ['query']),
+    'getDailyProgress' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Nat)], ['query']),
     'getIncomingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
     'getLeaderboard' : IDL.Func([], [IDL.Vec(RacerProfile)], ['query']),
     'getOutgoingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
+    'getRoomMembers' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+    'getStreak' : IDL.Func([], [IDL.Nat], ['query']),
     'getTaskProgress' : IDL.Func(
         [],
         [
@@ -306,14 +388,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(RacerProfile)],
         ['query'],
       ),
+    'getXpHistory' : IDL.Func([], [IDL.Vec(XpEvent)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'joinRoom' : IDL.Func([IDL.Text], [], []),
+    'leaveRoom' : IDL.Func([IDL.Text], [], []),
     'migrateDefaultRooms' : IDL.Func([], [], []),
     'registerCar' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text)],
+        [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text), IDL.Nat],
         [],
         [],
       ),
     'saveCallerUserProfile' : IDL.Func([RacerProfile], [], []),
+    'searchRacerByName' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Vec(
+            IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+          ),
+        ],
+        ['query'],
+      ),
     'sendChatMessage' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
 };

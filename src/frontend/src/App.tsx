@@ -45,9 +45,56 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "tasks", label: "Tasks", icon: Target },
 ];
 
+const ALLOWED_REFERRER = "https://revspace-2ah.caffeine.xyz/game";
+const SESSION_KEY = "sl_access_granted";
+
+function isAccessAllowed(): boolean {
+  // Already granted in this session
+  if (sessionStorage.getItem(SESSION_KEY) === "1") return true;
+
+  const ref = document.referrer;
+  if (!ref) return false;
+
+  try {
+    const url = new URL(ref);
+    const allowed = new URL(ALLOWED_REFERRER);
+    if (
+      url.origin === allowed.origin &&
+      url.pathname.startsWith(allowed.pathname)
+    ) {
+      sessionStorage.setItem(SESSION_KEY, "1");
+      return true;
+    }
+  } catch {
+    // invalid URL
+  }
+  return false;
+}
+
+function AccessDenied() {
+  useEffect(() => {
+    window.location.replace("https://revspace-2ah.caffeine.xyz/");
+  }, []);
+
+  return (
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-background dark scanlines px-6 text-center">
+      <div
+        className="mb-6"
+        style={{ filter: "drop-shadow(0 0 20px oklch(0.82 0.18 195 / 0.6))" }}
+      >
+        <Zap className="h-16 w-16 neon-cyan mx-auto" />
+      </div>
+      <p className="text-muted-foreground font-mono text-sm max-w-xs leading-relaxed">
+        Redirecting to RevSpace...
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [hasAccess] = useState(() => isAccessAllowed());
   const { identity, login, clear, isLoggingIn, isLoginSuccess } =
     useInternetIdentity();
   const { data: profile, isLoading: profileLoading } = useCallerProfile();
@@ -56,21 +103,27 @@ export default function App() {
 
   // After login, if no profile, prompt creation
   useEffect(() => {
+    if (!hasAccess) return;
     if (isLoginSuccess && !profileLoading && !profile) {
       setShowProfileModal(true);
     }
-  }, [isLoginSuccess, profile, profileLoading]);
+  }, [hasAccess, isLoginSuccess, profile, profileLoading]);
 
   // Also check when profile data loads after login
   useEffect(() => {
+    if (!hasAccess) return;
     if (isLoggedIn && !profileLoading && profile === null) {
       setShowProfileModal(true);
     }
-  }, [isLoggedIn, profile, profileLoading]);
+  }, [hasAccess, isLoggedIn, profile, profileLoading]);
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
   };
+
+  if (!hasAccess) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="min-h-dvh flex flex-col bg-background dark scanlines">

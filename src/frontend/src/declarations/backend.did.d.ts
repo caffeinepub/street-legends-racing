@@ -11,6 +11,7 @@ import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
 export interface Car {
+  'hp' : bigint,
   'model' : string,
   'make' : string,
   'mods' : Array<string>,
@@ -49,6 +50,17 @@ export interface RaceEvent {
   'challenged' : string,
   'challenger' : string,
 }
+export interface RaceResult {
+  'winnerHp' : bigint,
+  'winnerXp' : bigint,
+  'winner' : Principal,
+  'loserHp' : bigint,
+  'loserXp' : bigint,
+  'loser' : Principal,
+  'challengeId' : bigint,
+  'winnerName' : string,
+  'loserName' : string,
+}
 export interface RacerProfile {
   'xp' : bigint,
   'bio' : string,
@@ -70,6 +82,12 @@ export type Time = bigint;
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface XpEvent {
+  'raceLabel' : string,
+  'streakBonus' : boolean,
+  'timestamp' : Time,
+  'amount' : bigint,
+}
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -98,12 +116,20 @@ export interface _SERVICE {
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'acceptAndRaceChallenge' : ActorMethod<[bigint], RaceResult>,
   'acceptChallenge' : ActorMethod<[bigint], undefined>,
+  'addXpEvent' : ActorMethod<[string, bigint, boolean], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'claimDailyChallenge' : ActorMethod<[string, bigint], undefined>,
   'completeChallenge' : ActorMethod<[bigint, Principal], undefined>,
   'completeTask' : ActorMethod<[], RacerProfile>,
   'createChallenge' : ActorMethod<[Principal], bigint>,
   'createChatRoom' : ActorMethod<[string], undefined>,
+  'deleteChatRoom' : ActorMethod<[string], undefined>,
+  'findRandomOpponent' : ActorMethod<
+    [],
+    [] | [{ 'principal' : string, 'profile' : RacerProfile }]
+  >,
   'getActivityFeed' : ActorMethod<[], Array<RaceEvent>>,
   'getAllRacerProfiles' : ActorMethod<
     [],
@@ -112,11 +138,15 @@ export interface _SERVICE {
   'getCallerUserProfile' : ActorMethod<[], [] | [RacerProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCar' : ActorMethod<[Principal], [] | [Car]>,
+  'getCarHp' : ActorMethod<[Principal], bigint>,
   'getChatMessages' : ActorMethod<[string], Array<ChatMessage>>,
   'getChatRooms' : ActorMethod<[], Array<ChatRoom>>,
+  'getDailyProgress' : ActorMethod<[string], Array<bigint>>,
   'getIncomingChallenges' : ActorMethod<[], Array<RaceChallenge>>,
   'getLeaderboard' : ActorMethod<[], Array<RacerProfile>>,
   'getOutgoingChallenges' : ActorMethod<[], Array<RaceChallenge>>,
+  'getRoomMembers' : ActorMethod<[string], bigint>,
+  'getStreak' : ActorMethod<[], bigint>,
   'getTaskProgress' : ActorMethod<
     [],
     {
@@ -126,13 +156,20 @@ export interface _SERVICE {
     }
   >,
   'getUserProfile' : ActorMethod<[Principal], [] | [RacerProfile]>,
+  'getXpHistory' : ActorMethod<[], Array<XpEvent>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'joinRoom' : ActorMethod<[string], undefined>,
+  'leaveRoom' : ActorMethod<[string], undefined>,
   'migrateDefaultRooms' : ActorMethod<[], undefined>,
   'registerCar' : ActorMethod<
-    [string, string, bigint, Array<string>],
+    [string, string, bigint, Array<string>, bigint],
     undefined
   >,
   'saveCallerUserProfile' : ActorMethod<[RacerProfile], undefined>,
+  'searchRacerByName' : ActorMethod<
+    [string],
+    Array<{ 'principal' : string, 'profile' : RacerProfile }>
+  >,
   'sendChatMessage' : ActorMethod<[string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;

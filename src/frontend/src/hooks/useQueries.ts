@@ -4,8 +4,10 @@ import type {
   Car,
   RaceChallenge,
   RaceEvent,
+  RaceResult,
   RacerProfile,
   Task,
+  XpEvent,
 } from "../backend.d";
 import { useActor } from "./useActor";
 
@@ -18,6 +20,7 @@ export function useCallerProfile() {
       return actor.getCallerUserProfile();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 30_000,
   });
 }
 
@@ -28,6 +31,18 @@ export function useLeaderboard() {
     queryFn: async () => {
       if (!actor) return [];
       return actor.getLeaderboard();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAllRacerProfiles() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Array<{ principal: string; profile: RacerProfile }>>({
+    queryKey: ["allRacerProfiles"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllRacerProfiles();
     },
     enabled: !!actor && !isFetching,
   });
@@ -107,6 +122,8 @@ export function useCompleteTask() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["taskProgress"] });
       queryClient.invalidateQueries({ queryKey: ["callerProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["xpHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["streak"] });
     },
   });
 }
@@ -120,17 +137,20 @@ export function useRegisterCar() {
       model,
       year,
       mods,
+      hp,
     }: {
       make: string;
       model: string;
       year: bigint;
       mods: string[];
+      hp?: bigint;
     }) => {
       if (!actor) throw new Error("Not authenticated");
-      await actor.registerCar(make, model, year, mods);
+      await actor.registerCar(make, model, year, mods, hp ?? 0n);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["callerCar"] });
+      queryClient.invalidateQueries({ queryKey: ["myCar"] });
     },
   });
 }
@@ -194,6 +214,163 @@ export function useAcceptChallenge() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incomingChallenges"] });
       queryClient.invalidateQueries({ queryKey: ["outgoingChallenges"] });
+    },
+  });
+}
+
+export function useAcceptAndRaceChallenge() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation<RaceResult, Error, bigint>({
+    mutationFn: async (challengeId: bigint) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.acceptAndRaceChallenge(challengeId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incomingChallenges"] });
+      queryClient.invalidateQueries({ queryKey: ["outgoingChallenges"] });
+      queryClient.invalidateQueries({ queryKey: ["callerProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["activityFeed"] });
+      queryClient.invalidateQueries({ queryKey: ["xpHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["streak"] });
+    },
+  });
+}
+
+export function useFindRandomOpponent() {
+  const { actor } = useActor();
+  return useMutation<
+    { principal: string; profile: RacerProfile } | null,
+    Error,
+    void
+  >({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.findRandomOpponent();
+    },
+  });
+}
+
+export function useSearchRacerByName() {
+  const { actor } = useActor();
+  return useMutation<
+    Array<{ principal: string; profile: RacerProfile }>,
+    Error,
+    string
+  >({
+    mutationFn: async (name: string) => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.searchRacerByName(name);
+    },
+  });
+}
+
+export function useJoinRoom() {
+  const { actor } = useActor();
+  return useMutation<void, Error, string>({
+    mutationFn: async (roomId: string) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.joinRoom(roomId);
+    },
+  });
+}
+
+export function useLeaveRoom() {
+  const { actor } = useActor();
+  return useMutation<void, Error, string>({
+    mutationFn: async (roomId: string) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.leaveRoom(roomId);
+    },
+  });
+}
+
+export function useGetRoomMembers(roomId: string | null) {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["roomMembers", roomId],
+    queryFn: async () => {
+      if (!actor || !roomId) return 0n;
+      return actor.getRoomMembers(roomId);
+    },
+    enabled: !!actor && !isFetching && !!roomId,
+    refetchInterval: 5000,
+  });
+}
+
+export function useXpHistory() {
+  const { actor, isFetching } = useActor();
+  return useQuery<XpEvent[]>({
+    queryKey: ["xpHistory"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getXpHistory();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useStreak() {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint>({
+    queryKey: ["streak"],
+    queryFn: async () => {
+      if (!actor) return 0n;
+      return actor.getStreak();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 60_000,
+  });
+}
+
+export function useAddXpEvent() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      raceLabel,
+      amount,
+      streakBonus,
+    }: {
+      raceLabel: string;
+      amount: bigint;
+      streakBonus: boolean;
+    }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.addXpEvent(raceLabel, amount, streakBonus);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["xpHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["streak"] });
+    },
+  });
+}
+
+export function useGetDailyProgress(date: string) {
+  const { actor, isFetching } = useActor();
+  return useQuery<bigint[]>({
+    queryKey: ["dailyProgress", date],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getDailyProgress(date);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useClaimDailyChallenge() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, idx }: { date: string; idx: bigint }) => {
+      if (!actor) throw new Error("Not authenticated");
+      await actor.claimDailyChallenge(date, idx);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["dailyProgress", variables.date],
+      });
     },
   });
 }

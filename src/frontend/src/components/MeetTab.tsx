@@ -1,3 +1,14 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +28,7 @@ import {
   MessageSquare,
   Plus,
   Send,
+  Trash2,
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -26,7 +38,7 @@ import type { backendInterface } from "../backend";
 import type { ChatMessage as BackendChatMessage, ChatRoom } from "../backend.d";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useCallerProfile } from "../hooks/useQueries";
+import { useCallerProfile, useGetRoomMembers } from "../hooks/useQueries";
 
 // ── Taco Bell Banner ─────────────────────────────────────────────────────────
 
@@ -111,7 +123,10 @@ interface Room {
   name: string;
   maxMembers: number;
   isCustom?: boolean;
+  createdBy?: string;
 }
+
+const MAX_ROOM_MEMBERS = 20;
 
 // Convert bigint nanoseconds timestamp to milliseconds
 function nanoToMs(nano: bigint): number {
@@ -129,8 +144,9 @@ function backendRoomToRoom(r: ChatRoom): Room {
   return {
     id: r.id,
     name: r.name,
-    maxMembers: 10,
+    maxMembers: MAX_ROOM_MEMBERS,
     isCustom: r.isCustom,
+    createdBy: r.createdBy,
   };
 }
 
@@ -141,17 +157,22 @@ function RoomList({
   isLoading,
   onJoin,
   onCreateRoom,
+  onDeleteRoom,
   canCreate,
+  myId,
 }: {
   rooms: Room[];
   isLoading: boolean;
   onJoin: (room: Room) => void;
   onCreateRoom: (name: string) => Promise<void>;
+  onDeleteRoom: (roomId: string) => Promise<void>;
   canCreate: boolean;
+  myId: string;
 }) {
   const [newRoomName, setNewRoomName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleCreate = async () => {
     const name = newRoomName.trim();
@@ -169,6 +190,18 @@ function RoomList({
       toast.error("Failed to create room");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDelete = async (roomId: string) => {
+    setDeletingId(roomId);
+    try {
+      await onDeleteRoom(roomId);
+      toast.success("Room deleted");
+    } catch {
+      toast.error("Failed to delete room");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -299,6 +332,51 @@ function RoomList({
                   Max {room.maxMembers} members
                 </p>
               </div>
+              {room.isCustom && room.createdBy && room.createdBy === myId && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={deletingId === room.id}
+                      aria-label={`Delete room ${room.name}`}
+                      className="h-7 w-7 p-0 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      {deletingId === room.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="bg-popover border-border max-w-sm">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="font-display font-black text-foreground">
+                        Delete room?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="font-body text-muted-foreground">
+                        Delete{" "}
+                        <span className="font-bold text-foreground">
+                          {room.name}
+                        </span>
+                        ? This will remove the room and all its messages
+                        permanently.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="font-display font-bold">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(room.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-display font-bold"
+                      >
+                        Delete Room
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
               <Button
                 size="sm"
                 onClick={() => onJoin(room)}
@@ -312,6 +390,29 @@ function RoomList({
         </div>
       )}
     </motion.div>
+  );
+}
+
+// ── Room Member Count Badge ───────────────────────────────────────────────────
+
+function RoomMemberBadge({ roomId }: { roomId: string }) {
+  const { data: count } = useGetRoomMembers(roomId);
+  const memberCount = count !== undefined ? Number(count) : null;
+
+  if (memberCount === null) return null;
+
+  return (
+    <Badge
+      variant="outline"
+      className="font-mono text-[10px] shrink-0"
+      style={{
+        borderColor: "oklch(0.88 0.22 120 / 0.4)",
+        color: "oklch(0.88 0.22 120)",
+      }}
+    >
+      <Users className="h-2.5 w-2.5 mr-1" />
+      {memberCount}/{MAX_ROOM_MEMBERS}
+    </Badge>
   );
 }
 
@@ -336,6 +437,7 @@ function ChatRoomView({
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasJoinedRef = useRef(false);
 
   // Fetch messages from backend
   const fetchMessages = useCallback(async () => {
@@ -348,12 +450,41 @@ function ChatRoomView({
         return Number(a.id - b.id);
       });
       setMessages(sorted);
-    } catch {
+    } catch (err) {
+      console.error("Failed to fetch messages:", err);
       // Silently ignore poll failures
     } finally {
       setIsLoadingMessages(false);
     }
   }, [actor, room.id]);
+
+  // Join room when entering, leave when exiting
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const joinRoom = async () => {
+      if (hasJoinedRef.current) return;
+      try {
+        await actor.joinRoom(room.id);
+        hasJoinedRef.current = true;
+      } catch (err) {
+        // Gracefully handle - room might be full or error, don't crash
+        console.warn("joinRoom error (non-fatal):", err);
+      }
+    };
+
+    joinRoom();
+
+    return () => {
+      // Leave room on cleanup - must not throw or affect profile data
+      if (hasJoinedRef.current) {
+        actor.leaveRoom(room.id).catch((err) => {
+          console.warn("leaveRoom error (non-fatal):", err);
+        });
+        hasJoinedRef.current = false;
+      }
+    };
+  }, [actor, room.id, isLoggedIn]);
 
   // Initial fetch + polling every 2s
   useEffect(() => {
@@ -384,14 +515,20 @@ function ChatRoomView({
       return;
     }
 
+    if (!actor) {
+      toast.error("Not connected. Please wait.");
+      return;
+    }
+
     setIsSending(true);
     setInput("");
     try {
       await actor.sendChatMessage(room.id, text);
       // Immediately re-fetch so the message appears right away
       await fetchMessages();
-    } catch {
-      toast.error("Failed to send message");
+    } catch (err) {
+      console.error("sendChatMessage error:", err);
+      toast.error("Failed to send message. Try again.");
       setInput(text); // restore on failure
     } finally {
       setIsSending(false);
@@ -403,6 +540,11 @@ function ChatRoomView({
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  const handleLeave = () => {
+    // Leave is handled by the cleanup effect above; just navigate back
+    onLeave();
   };
 
   return (
@@ -417,7 +559,7 @@ function ChatRoomView({
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/20 shrink-0">
         <button
           type="button"
-          onClick={onLeave}
+          onClick={handleLeave}
           className="text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Leave room"
         >
@@ -440,6 +582,7 @@ function ChatRoomView({
             </span>
           </div>
         </div>
+        <RoomMemberBadge roomId={room.id} />
         <Badge
           variant="outline"
           className="font-mono text-[10px] border-neon-cyan/30 shrink-0"
@@ -584,7 +727,8 @@ export function MeetTab() {
     try {
       const fetched = await actor.getChatRooms();
       setRooms(fetched.map(backendRoomToRoom));
-    } catch {
+    } catch (err) {
+      console.warn("fetchRooms error (non-fatal):", err);
       // Silently ignore poll failures
     } finally {
       setIsLoadingRooms(false);
@@ -604,8 +748,22 @@ export function MeetTab() {
   const handleCreateRoom = useCallback(
     async (name: string) => {
       if (!actor) throw new Error("Not connected");
-      await actor.createChatRoom(name);
+      try {
+        await actor.createChatRoom(name);
+      } catch (err) {
+        console.error("createChatRoom error:", err);
+        throw err;
+      }
       // Re-fetch immediately so new room appears
+      await fetchRooms();
+    },
+    [actor, fetchRooms],
+  );
+
+  const handleDeleteRoom = useCallback(
+    async (roomId: string) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.deleteChatRoom(roomId);
       await fetchRooms();
     },
     [actor, fetchRooms],
@@ -653,7 +811,9 @@ export function MeetTab() {
               isLoading={isLoadingRooms}
               onJoin={(room) => setActiveRoom(room)}
               onCreateRoom={handleCreateRoom}
+              onDeleteRoom={handleDeleteRoom}
               canCreate={isLoggedIn}
+              myId={myId}
             />
           </motion.div>
         )}

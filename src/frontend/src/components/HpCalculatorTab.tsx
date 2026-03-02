@@ -242,8 +242,9 @@ export function HpCalculatorTab() {
         model: existingCar.model,
         year: existingCar.year,
         mods: selectedModNames,
+        hp: BigInt(totalHp),
       });
-      toast.success("Mods saved to your garage!");
+      toast.success(`Mods & ${totalHp} HP saved to your garage!`);
     } catch {
       toast.error("Failed to save. Try again.");
     } finally {
@@ -323,6 +324,14 @@ export function HpCalculatorTab() {
             +{hpFromSelected + hpFromCustom} hp from{" "}
             {selectedMods.size + customMods.length} mod
             {selectedMods.size + customMods.length !== 1 ? "s" : ""}
+          </p>
+        )}
+        {existingCar && existingCar.hp > 0n && (
+          <p
+            className="text-xs font-mono mt-2"
+            style={{ color: "oklch(0.88 0.22 120 / 0.7)" }}
+          >
+            Current saved HP: {existingCar.hp.toString()}
           </p>
         )}
       </motion.div>

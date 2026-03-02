@@ -54,6 +54,7 @@ function LoginPrompt({ onLogin }: { onLogin: () => void }) {
 }
 
 function CarDisplay({ car }: { car: Car }) {
+  const hp = Number(car.hp);
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -74,7 +75,29 @@ function CarDisplay({ car }: { car: Car }) {
             {car.model}
           </p>
         </div>
-        <CarIcon className="h-8 w-8 text-secondary/60" />
+        {/* HP Badge */}
+        {hp > 0 && (
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="flex flex-col items-center rounded-lg border border-neon-lime/40 bg-neon-lime/5 px-3 py-2"
+            style={{ boxShadow: "0 0 20px oklch(0.88 0.22 120 / 0.2)" }}
+          >
+            <span
+              className="font-display font-black text-3xl leading-none neon-lime"
+              style={{
+                textShadow:
+                  "0 0 14px oklch(0.88 0.22 120 / 0.9), 0 0 40px oklch(0.88 0.22 120 / 0.4)",
+              }}
+            >
+              {hp}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mt-0.5">
+              HP
+            </span>
+          </motion.div>
+        )}
       </div>
 
       {car.mods.length > 0 && (
@@ -109,6 +132,9 @@ function GarageForm({ existing, onSuccess }: GarageFormProps) {
   const [model, setModel] = useState(existing?.model || "");
   const [year, setYear] = useState(existing ? existing.year.toString() : "");
   const [modsRaw, setModsRaw] = useState(existing?.mods.join(", ") || "");
+  const [hpRaw, setHpRaw] = useState(
+    existing?.hp && existing.hp > 0n ? existing.hp.toString() : "",
+  );
   const registerCar = useRegisterCar();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,6 +148,11 @@ function GarageForm({ existing, onSuccess }: GarageFormProps) {
       .split(",")
       .map((m) => m.trim())
       .filter(Boolean);
+    const hpNum = hpRaw.trim() ? Number.parseInt(hpRaw, 10) : 0;
+    if (hpRaw.trim() && (Number.isNaN(hpNum) || hpNum < 0)) {
+      toast.error("Enter a valid HP number.");
+      return;
+    }
 
     try {
       await registerCar.mutateAsync({
@@ -129,6 +160,7 @@ function GarageForm({ existing, onSuccess }: GarageFormProps) {
         model: model.trim(),
         year: BigInt(yearNum),
         mods,
+        hp: BigInt(hpNum),
       });
       toast.success(
         existing
@@ -188,24 +220,47 @@ function GarageForm({ existing, onSuccess }: GarageFormProps) {
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label
-          htmlFor="car-year"
-          className="text-[11px] uppercase tracking-widest font-mono text-foreground/60"
-        >
-          Year
-        </Label>
-        <Input
-          id="car-year"
-          type="number"
-          placeholder="1993"
-          min={1900}
-          max={2030}
-          value={year}
-          onChange={(e) => setYear(e.target.value)}
-          className="bg-input border-border focus:border-neon-cyan/50 font-mono text-sm"
-          required
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="car-year"
+            className="text-[11px] uppercase tracking-widest font-mono text-foreground/60"
+          >
+            Year
+          </Label>
+          <Input
+            id="car-year"
+            type="number"
+            placeholder="1993"
+            min={1900}
+            max={2030}
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="bg-input border-border focus:border-neon-cyan/50 font-mono text-sm"
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="car-hp"
+            className="text-[11px] uppercase tracking-widest font-mono text-foreground/60"
+          >
+            HP{" "}
+            <span className="normal-case tracking-normal text-muted-foreground font-body">
+              (optional)
+            </span>
+          </Label>
+          <Input
+            id="car-hp"
+            type="number"
+            placeholder="340"
+            min={0}
+            max={5000}
+            value={hpRaw}
+            onChange={(e) => setHpRaw(e.target.value)}
+            className="bg-input border-border focus:border-neon-lime/50 font-mono text-sm"
+          />
+        </div>
       </div>
 
       <div className="space-y-1.5">

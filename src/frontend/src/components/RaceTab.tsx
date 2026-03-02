@@ -13,12 +13,14 @@ import {
   Clock,
   Copy,
   Flag,
-  Info,
   List,
   Loader2,
   Search,
+  Shuffle,
   Swords,
+  Trophy,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -27,15 +29,17 @@ import { toast } from "sonner";
 import {
   ChallengeStatus,
   type RaceChallenge,
+  type RaceResult,
   type RacerProfile,
 } from "../backend.d";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
-  useAcceptChallenge,
+  useAcceptAndRaceChallenge,
+  useAllRacerProfiles,
   useCallerProfile,
   useCreateChallenge,
+  useFindRandomOpponent,
   useIncomingChallenges,
-  useLeaderboard,
   useOutgoingChallenges,
 } from "../hooks/useQueries";
 
@@ -111,6 +115,188 @@ function RacerSkeletonRow() {
 
 const SKELETON_KEYS = ["rs1", "rs2", "rs3", "rs4", "rs5"];
 
+// ── Race Result Modal ─────────────────────────────────────────────────────────
+
+function RaceResultModal({
+  result,
+  myPrincipal,
+  onClose,
+}: {
+  result: RaceResult;
+  myPrincipal: string;
+  onClose: () => void;
+}) {
+  const myPrincipalStr = myPrincipal;
+  const iWon = result.winner.toString() === myPrincipalStr;
+  const winnerName = result.winnerName || result.winner.toString().slice(0, 8);
+  const loserName = result.loserName || result.loser.toString().slice(0, 8);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "oklch(0.05 0.02 265 / 0.85)" }}
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.8, opacity: 0, y: 20 }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          className="relative max-w-sm w-full rounded-xl border bg-card p-6 space-y-5 overflow-hidden"
+          style={{
+            borderColor: iWon
+              ? "oklch(0.88 0.22 120 / 0.6)"
+              : "oklch(0.55 0.22 20 / 0.6)",
+            boxShadow: iWon
+              ? "0 0 60px oklch(0.88 0.22 120 / 0.3)"
+              : "0 0 60px oklch(0.55 0.22 20 / 0.3)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Top glow stripe */}
+          <div
+            className="absolute top-0 left-0 right-0 h-[2px]"
+            style={{
+              background: iWon
+                ? "linear-gradient(90deg, oklch(0.88 0.22 120), oklch(0.82 0.18 195))"
+                : "linear-gradient(90deg, oklch(0.55 0.22 20), oklch(0.62 0.26 330))",
+            }}
+          />
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          {/* Header */}
+          <div className="text-center pt-2">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1, type: "spring", stiffness: 400 }}
+              className="mb-3"
+            >
+              {iWon ? (
+                <Trophy
+                  className="h-14 w-14 mx-auto"
+                  style={{
+                    color: "oklch(0.88 0.22 120)",
+                    filter: "drop-shadow(0 0 20px oklch(0.88 0.22 120 / 0.8))",
+                  }}
+                />
+              ) : (
+                <Flag
+                  className="h-14 w-14 mx-auto"
+                  style={{
+                    color: "oklch(0.55 0.22 20)",
+                    filter: "drop-shadow(0 0 20px oklch(0.55 0.22 20 / 0.8))",
+                  }}
+                />
+              )}
+            </motion.div>
+            <h2
+              className="font-display font-black text-3xl uppercase tracking-widest"
+              style={{
+                color: iWon ? "oklch(0.88 0.22 120)" : "oklch(0.55 0.22 20)",
+                textShadow: iWon
+                  ? "0 0 20px oklch(0.88 0.22 120 / 0.9)"
+                  : "0 0 20px oklch(0.55 0.22 20 / 0.9)",
+              }}
+            >
+              {iWon ? "YOU WIN!" : "YOU LOST"}
+            </h2>
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mt-1">
+              Race Result
+            </p>
+          </div>
+
+          {/* VS breakdown */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Winner */}
+            <div
+              className="rounded-lg border p-3 text-center space-y-1.5"
+              style={{
+                borderColor: "oklch(0.88 0.22 120 / 0.4)",
+                background: "oklch(0.88 0.22 120 / 0.05)",
+              }}
+            >
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Winner
+              </p>
+              <p
+                className="font-display font-bold text-sm truncate"
+                style={{ color: "oklch(0.88 0.22 120)" }}
+              >
+                {winnerName}
+              </p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-mono text-foreground/70">
+                  {result.winnerHp.toString()} HP
+                </p>
+                <p className="text-xs font-mono text-muted-foreground">
+                  +{result.winnerXp.toString()} XP
+                </p>
+              </div>
+            </div>
+
+            {/* Loser */}
+            <div
+              className="rounded-lg border p-3 text-center space-y-1.5"
+              style={{
+                borderColor: "oklch(0.55 0.22 20 / 0.4)",
+                background: "oklch(0.55 0.22 20 / 0.05)",
+              }}
+            >
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                Loser
+              </p>
+              <p
+                className="font-display font-bold text-sm truncate"
+                style={{ color: "oklch(0.55 0.22 20)" }}
+              >
+                {loserName}
+              </p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-mono text-foreground/70">
+                  {result.loserHp.toString()} HP
+                </p>
+                <p className="text-xs font-mono text-muted-foreground">
+                  +{result.loserXp.toString()} XP
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            onClick={onClose}
+            className="w-full font-display font-bold tracking-wider"
+            style={
+              iWon
+                ? {
+                    background: "oklch(0.88 0.22 120)",
+                    color: "oklch(0.08 0.01 265)",
+                    boxShadow: "0 0 20px oklch(0.88 0.22 120 / 0.4)",
+                  }
+                : {}
+            }
+          >
+            Close
+          </Button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 // ── Browse Racers Panel ───────────────────────────────────────────────────────
 
 function BrowseRacersPanel({
@@ -118,18 +304,18 @@ function BrowseRacersPanel({
   onSelectRacer,
 }: {
   myProfileName: string | undefined;
-  onSelectRacer: (racer: RacerProfile) => void;
+  onSelectRacer: (racer: { name: string; principal: string }) => void;
 }) {
-  const { data: lbData, isLoading } = useLeaderboard();
+  const { data: allRacers, isLoading } = useAllRacerProfiles();
   const [search, setSearch] = useState("");
 
-  const racers = lbData ?? [];
+  const racers = allRacers ?? [];
   const sorted = [...racers].sort((a, b) =>
-    Number(b.reputation - a.reputation),
+    Number(b.profile.reputation - a.profile.reputation),
   );
   const filtered = search.trim()
     ? sorted.filter((r) =>
-        r.name.toLowerCase().includes(search.trim().toLowerCase()),
+        r.profile.name.toLowerCase().includes(search.trim().toLowerCase()),
       )
     : sorted;
 
@@ -184,7 +370,7 @@ function BrowseRacersPanel({
               )}
             </div>
           ) : (
-            filtered.map((racer, i) => {
+            filtered.map(({ principal, profile: racer }, i) => {
               const isMe =
                 myProfileName !== undefined && racer.name === myProfileName;
               const winRate =
@@ -205,7 +391,7 @@ function BrowseRacersPanel({
 
               return (
                 <motion.div
-                  key={racer.name}
+                  key={principal}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.03, duration: 0.2 }}
@@ -266,7 +452,9 @@ function BrowseRacersPanel({
                       variant="outline"
                       className="h-7 px-2.5 text-xs font-display font-bold tracking-wide border-secondary/40 hover:border-secondary hover:bg-secondary/10 shrink-0"
                       style={{ color: "oklch(0.62 0.26 330)" }}
-                      onClick={() => onSelectRacer(racer)}
+                      onClick={() =>
+                        onSelectRacer({ name: racer.name, principal })
+                      }
                     >
                       <Swords className="h-3 w-3 mr-1" />
                       Challenge
@@ -307,195 +495,215 @@ function statusLabel(status: ChallengeStatus): {
 }
 
 function RaceList() {
+  const { identity } = useInternetIdentity();
   const { data: incoming = [], isLoading: inLoading } = useIncomingChallenges();
   const { data: outgoing = [], isLoading: outLoading } =
     useOutgoingChallenges();
-  const acceptChallenge = useAcceptChallenge();
+  const acceptAndRace = useAcceptAndRaceChallenge();
+  const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
+  const [racingId, setRacingId] = useState<bigint | null>(null);
 
-  const handleAccept = async (id: bigint) => {
+  const myPrincipal = identity?.getPrincipal().toString() ?? "";
+
+  const handleAcceptAndRace = async (id: bigint) => {
+    setRacingId(id);
     try {
-      await acceptChallenge.mutateAsync(id);
-      toast.success("Challenge accepted! Time to race.");
-    } catch {
-      toast.error("Failed to accept challenge.");
+      const result = await acceptAndRace.mutateAsync(id);
+      setRaceResult(result);
+    } catch (err) {
+      console.error("Race error:", err);
+      toast.error("Failed to race. Try again.");
+    } finally {
+      setRacingId(null);
     }
   };
 
   const isLoading = inLoading || outLoading;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-5"
-    >
-      {/* Incoming Challenges */}
-      <div className="rounded-lg border border-secondary/30 bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
-          <Flag
-            className="h-4 w-4 text-secondary"
-            style={{
-              filter: "drop-shadow(0 0 6px oklch(0.62 0.26 330 / 0.6))",
-            }}
-          />
-          <h3
-            className="font-display font-bold text-sm uppercase tracking-widest text-secondary"
-            style={{ textShadow: "0 0 8px oklch(0.62 0.26 330 / 0.5)" }}
-          >
-            Incoming Challenges
-          </h3>
-          <Badge
-            variant="outline"
-            className="ml-auto font-mono text-[10px]"
-            style={{
-              borderColor: "oklch(0.62 0.26 330 / 0.4)",
-              color: "oklch(0.62 0.26 330)",
-            }}
-          >
-            {incoming.length}
-          </Badge>
-        </div>
+    <>
+      {raceResult && (
+        <RaceResultModal
+          result={raceResult}
+          myPrincipal={myPrincipal}
+          onClose={() => setRaceResult(null)}
+        />
+      )}
 
-        <div className="p-3 space-y-2">
-          {isLoading ? (
-            <div className="py-4 flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : incoming.length === 0 ? (
-            <div className="py-6 text-center">
-              <Flag className="h-8 w-8 mx-auto text-muted-foreground/20 mb-2" />
-              <p className="text-sm font-display font-bold text-muted-foreground">
-                No incoming challenges
-              </p>
-              <p className="text-[11px] font-mono text-muted-foreground/50 mt-0.5">
-                Challengers will show here
-              </p>
-            </div>
-          ) : (
-            incoming.map((c: RaceChallenge) => {
-              const { label, color } = statusLabel(c.status);
-              const isPending = c.status === ChallengeStatus.pending;
-              return (
-                <div
-                  key={c.id.toString()}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-muted-foreground truncate">
-                      From:{" "}
-                      <span className="text-foreground/80">
-                        {c.challenger.toString().slice(0, 12)}…
-                      </span>
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        Challenge #{c.id.toString()}
-                      </span>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] font-mono shrink-0 ${color}`}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="space-y-5"
+      >
+        {/* Incoming Challenges */}
+        <div className="rounded-lg border border-secondary/30 bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+            <Flag
+              className="h-4 w-4 text-secondary"
+              style={{
+                filter: "drop-shadow(0 0 6px oklch(0.62 0.26 330 / 0.6))",
+              }}
+            />
+            <h3
+              className="font-display font-bold text-sm uppercase tracking-widest text-secondary"
+              style={{ textShadow: "0 0 8px oklch(0.62 0.26 330 / 0.5)" }}
+            >
+              Incoming Challenges
+            </h3>
+            <Badge
+              variant="outline"
+              className="ml-auto font-mono text-[10px]"
+              style={{
+                borderColor: "oklch(0.62 0.26 330 / 0.4)",
+                color: "oklch(0.62 0.26 330)",
+              }}
+            >
+              {incoming.length}
+            </Badge>
+          </div>
+
+          <div className="p-3 space-y-2">
+            {isLoading ? (
+              <div className="py-4 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : incoming.length === 0 ? (
+              <div className="py-6 text-center">
+                <Flag className="h-8 w-8 mx-auto text-muted-foreground/20 mb-2" />
+                <p className="text-sm font-display font-bold text-muted-foreground">
+                  No incoming challenges
+                </p>
+                <p className="text-[11px] font-mono text-muted-foreground/50 mt-0.5">
+                  Challengers will show here
+                </p>
+              </div>
+            ) : (
+              incoming.map((c: RaceChallenge) => {
+                const { label, color } = statusLabel(c.status);
+                const isPending = c.status === ChallengeStatus.pending;
+                const isThisRacing = racingId === c.id;
+                return (
+                  <div
+                    key={c.id.toString()}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
                   >
-                    {label}
-                  </Badge>
-                  {isPending && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleAccept(c.id)}
-                      disabled={acceptChallenge.isPending}
-                      className="h-7 px-2.5 text-xs font-display font-bold tracking-wide bg-secondary text-secondary-foreground hover:opacity-90 shrink-0"
-                      style={{
-                        boxShadow: "0 0 10px oklch(0.62 0.26 330 / 0.3)",
-                      }}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-muted-foreground truncate">
+                        From:{" "}
+                        <span className="text-foreground/80">
+                          {c.challenger.toString().slice(0, 12)}…
+                        </span>
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          Challenge #{c.id.toString()}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-mono shrink-0 ${color}`}
                     >
-                      {acceptChallenge.isPending ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                      )}
-                      Accept
-                    </Button>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Outgoing Challenges */}
-      <div className="rounded-lg border border-neon-cyan/20 bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
-          <Swords
-            className="h-4 w-4 neon-cyan"
-            style={{
-              filter: "drop-shadow(0 0 6px oklch(0.82 0.18 195 / 0.6))",
-            }}
-          />
-          <h3 className="font-display font-bold text-sm uppercase tracking-widest neon-cyan">
-            Sent Challenges
-          </h3>
-          <Badge
-            variant="outline"
-            className="ml-auto font-mono text-[10px] border-neon-cyan/30"
-            style={{ color: "oklch(0.82 0.18 195)" }}
-          >
-            {outgoing.length}
-          </Badge>
-        </div>
-
-        <div className="p-3 space-y-2">
-          {isLoading ? (
-            <div className="py-4 flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : outgoing.length === 0 ? (
-            <div className="py-6 text-center">
-              <Swords className="h-8 w-8 mx-auto text-muted-foreground/20 mb-2" />
-              <p className="text-sm font-display font-bold text-muted-foreground">
-                No sent challenges
-              </p>
-              <p className="text-[11px] font-mono text-muted-foreground/50 mt-0.5">
-                Challenge someone from the Throw Down tab
-              </p>
-            </div>
-          ) : (
-            outgoing.map((c: RaceChallenge) => {
-              const { label, color } = statusLabel(c.status);
-              return (
-                <div
-                  key={c.id.toString()}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-muted-foreground truncate">
-                      To:{" "}
-                      <span className="text-foreground/80">
-                        {c.challenged.toString().slice(0, 12)}…
-                      </span>
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        Challenge #{c.id.toString()}
-                      </span>
-                    </div>
+                      {label}
+                    </Badge>
+                    {isPending && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleAcceptAndRace(c.id)}
+                        disabled={acceptAndRace.isPending}
+                        className="h-7 px-2.5 text-xs font-display font-bold tracking-wide bg-secondary text-secondary-foreground hover:opacity-90 shrink-0"
+                        style={{
+                          boxShadow: "0 0 10px oklch(0.62 0.26 330 / 0.3)",
+                        }}
+                      >
+                        {isThisRacing ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                        )}
+                        {isThisRacing ? "Racing..." : "Accept & Race"}
+                      </Button>
+                    )}
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] font-mono shrink-0 ${color}`}
-                  >
-                    {label}
-                  </Badge>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
-    </motion.div>
+
+        {/* Outgoing Challenges */}
+        <div className="rounded-lg border border-neon-cyan/20 bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+            <Swords
+              className="h-4 w-4 neon-cyan"
+              style={{
+                filter: "drop-shadow(0 0 6px oklch(0.82 0.18 195 / 0.6))",
+              }}
+            />
+            <h3 className="font-display font-bold text-sm uppercase tracking-widest neon-cyan">
+              Sent Challenges
+            </h3>
+            <Badge
+              variant="outline"
+              className="ml-auto font-mono text-[10px] border-neon-cyan/30"
+              style={{ color: "oklch(0.82 0.18 195)" }}
+            >
+              {outgoing.length}
+            </Badge>
+          </div>
+
+          <div className="p-3 space-y-2">
+            {isLoading ? (
+              <div className="py-4 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : outgoing.length === 0 ? (
+              <div className="py-6 text-center">
+                <Swords className="h-8 w-8 mx-auto text-muted-foreground/20 mb-2" />
+                <p className="text-sm font-display font-bold text-muted-foreground">
+                  No sent challenges
+                </p>
+                <p className="text-[11px] font-mono text-muted-foreground/50 mt-0.5">
+                  Challenge someone from the Throw Down tab
+                </p>
+              </div>
+            ) : (
+              outgoing.map((c: RaceChallenge) => {
+                const { label, color } = statusLabel(c.status);
+                return (
+                  <div
+                    key={c.id.toString()}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-muted-foreground truncate">
+                        To:{" "}
+                        <span className="text-foreground/80">
+                          {c.challenged.toString().slice(0, 12)}…
+                        </span>
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          Challenge #{c.id.toString()}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-mono shrink-0 ${color}`}
+                    >
+                      {label}
+                    </Badge>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -504,18 +712,48 @@ function RaceList() {
 function ChallengePanel({ profile }: { profile: RacerProfile }) {
   const { identity } = useInternetIdentity();
   const createChallenge = useCreateChallenge();
+  const findRandom = useFindRandomOpponent();
   const [challengedId, setChallengedId] = useState("");
-  const [selectedRacer, setSelectedRacer] = useState<RacerProfile | null>(null);
+  const [selectedRacer, setSelectedRacer] = useState<{
+    name: string;
+    principal: string;
+  } | null>(null);
   const challengeFormRef = useRef<HTMLDivElement>(null);
 
-  const handleSelectRacer = (racer: RacerProfile) => {
+  const handleSelectRacer = (racer: { name: string; principal: string }) => {
     setSelectedRacer(racer);
+    setChallengedId(racer.principal);
     setTimeout(() => {
       challengeFormRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     }, 100);
+  };
+
+  const handleRandomMatch = async () => {
+    try {
+      const opponent = await findRandom.mutateAsync();
+      if (!opponent) {
+        toast.error("No available opponents right now. Try again later.");
+        return;
+      }
+      setSelectedRacer({
+        name: opponent.profile.name,
+        principal: opponent.principal,
+      });
+      setChallengedId(opponent.principal);
+      toast.success(`Random match found: ${opponent.profile.name}!`);
+      setTimeout(() => {
+        challengeFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    } catch (err) {
+      console.error("Random match error:", err);
+      toast.error("Failed to find a random opponent.");
+    }
   };
 
   const handleChallenge = async (e: React.FormEvent) => {
@@ -560,9 +798,27 @@ function ChallengePanel({ profile }: { profile: RacerProfile }) {
           </h2>
         </div>
         <p className="text-muted-foreground text-sm font-body">
-          Find a racer, grab their ID, and send the challenge.
+          Browse racers, tap Challenge for one-tap matchmaking, or find a random
+          opponent.
         </p>
       </div>
+
+      {/* Random Match Button */}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleRandomMatch}
+        disabled={findRandom.isPending}
+        className="w-full font-display font-bold tracking-wider border-neon-lime/30 hover:border-neon-lime/60 hover:bg-neon-lime/5"
+        style={{ color: "oklch(0.88 0.22 120)" }}
+      >
+        {findRandom.isPending ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Shuffle className="mr-2 h-4 w-4" />
+        )}
+        {findRandom.isPending ? "Searching..." : "Random Match"}
+      </Button>
 
       {/* Browse Racers */}
       <BrowseRacersPanel
@@ -600,15 +856,16 @@ function ChallengePanel({ profile }: { profile: RacerProfile }) {
               >
                 Challenging: {selectedRacer.name}
               </p>
-              <p className="text-[11px] font-mono text-muted-foreground mt-0.5 leading-relaxed">
-                Ask{" "}
-                <span className="text-foreground/80">{selectedRacer.name}</span>{" "}
-                for their Principal ID and enter it below.
+              <p className="text-[11px] font-mono text-muted-foreground mt-0.5 leading-relaxed break-all">
+                ID: {selectedRacer.principal.slice(0, 20)}…
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setSelectedRacer(null)}
+              onClick={() => {
+                setSelectedRacer(null);
+                setChallengedId("");
+              }}
               className="text-muted-foreground/40 hover:text-muted-foreground text-[10px] font-mono mt-0.5 shrink-0"
               aria-label="Clear selection"
             >
@@ -639,12 +896,11 @@ function ChallengePanel({ profile }: { profile: RacerProfile }) {
               autoComplete="off"
               spellCheck={false}
             />
-            <p className="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
-              <Info className="h-3 w-3 shrink-0" />
-              {selectedRacer
-                ? `Ask ${selectedRacer.name} to copy their ID from the Race tab`
-                : "Ask your opponent to copy their ID from the Race tab"}
-            </p>
+            {!selectedRacer && (
+              <p className="text-[11px] text-muted-foreground font-mono">
+                Select a racer above or enter their Principal ID manually
+              </p>
+            )}
           </div>
 
           <Button
