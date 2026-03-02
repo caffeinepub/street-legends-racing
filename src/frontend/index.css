@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Fonts ── */
+@font-face {
+  font-family: "Mona Sans";
+  src: url("/assets/fonts/MonaSans.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/assets/fonts/GeistMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.375rem;
+
+    /* Street Legends dark theme — permanent dark */
+    --background: 0.1 0.008 265;
+    --foreground: 0.97 0.01 265;
+    --card: 0.13 0.012 265;
+    --card-foreground: 0.97 0.01 265;
+    --popover: 0.15 0.014 265;
+    --popover-foreground: 0.97 0.01 265;
+
+    /* Primary: Electric Cyan */
+    --primary: 0.82 0.18 195;
+    --primary-foreground: 0.08 0.01 265;
+
+    /* Secondary: Hot Magenta */
+    --secondary: 0.62 0.26 330;
+    --secondary-foreground: 0.97 0.01 265;
+
+    --muted: 0.16 0.014 265;
+    --muted-foreground: 0.55 0.02 265;
+
+    /* Accent: Neon Yellow/Lime */
+    --accent: 0.88 0.22 120;
+    --accent-foreground: 0.08 0.01 265;
+
+    --destructive: 0.65 0.24 22;
+    --destructive-foreground: 0.97 0 0;
+
+    --border: 0.22 0.015 265;
+    --input: 0.18 0.014 265;
+    --ring: 0.82 0.18 195;
+
+    /* Charts */
+    --chart-1: 0.82 0.18 195;
+    --chart-2: 0.62 0.26 330;
+    --chart-3: 0.88 0.22 120;
+    --chart-4: 0.75 0.22 55;
+    --chart-5: 0.65 0.24 22;
+
+    /* Sidebar (same as background) */
+    --sidebar: 0.1 0.008 265;
+    --sidebar-foreground: 0.97 0.01 265;
+    --sidebar-primary: 0.82 0.18 195;
+    --sidebar-primary-foreground: 0.08 0.01 265;
+    --sidebar-accent: 0.16 0.014 265;
+    --sidebar-accent-foreground: 0.97 0.01 265;
+    --sidebar-border: 0.22 0.015 265;
+    --sidebar-ring: 0.82 0.18 195;
+
+    /* Custom neon tokens */
+    --neon-cyan: 0.82 0.18 195;
+    --neon-magenta: 0.62 0.26 330;
+    --neon-lime: 0.88 0.22 120;
+    --neon-amber: 0.78 0.2 55;
+    --gold: 0.78 0.18 85;
+    --silver: 0.65 0.01 265;
+    --bronze: 0.62 0.12 55;
+  }
+
+  .dark {
+    --background: 0.1 0.008 265;
+    --foreground: 0.97 0.01 265;
+    --card: 0.13 0.012 265;
+    --card-foreground: 0.97 0.01 265;
+    --popover: 0.15 0.014 265;
+    --popover-foreground: 0.97 0.01 265;
+    --primary: 0.82 0.18 195;
+    --primary-foreground: 0.08 0.01 265;
+    --secondary: 0.62 0.26 330;
+    --secondary-foreground: 0.97 0.01 265;
+    --muted: 0.16 0.014 265;
+    --muted-foreground: 0.55 0.02 265;
+    --accent: 0.88 0.22 120;
+    --accent-foreground: 0.08 0.01 265;
+    --destructive: 0.65 0.24 22;
+    --destructive-foreground: 0.97 0 0;
+    --border: 0.22 0.015 265;
+    --input: 0.18 0.014 265;
+    --ring: 0.82 0.18 195;
+    --sidebar: 0.1 0.008 265;
+    --sidebar-foreground: 0.97 0.01 265;
+    --sidebar-primary: 0.82 0.18 195;
+    --sidebar-primary-foreground: 0.08 0.01 265;
+    --sidebar-accent: 0.16 0.014 265;
+    --sidebar-accent-foreground: 0.97 0.01 265;
+    --sidebar-border: 0.22 0.015 265;
+    --sidebar-ring: 0.82 0.18 195;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.2 0.06 265 / 0.4), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 120%, oklch(0.15 0.08 195 / 0.15), transparent);
+    min-height: 100dvh;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Cabinet Grotesk", sans-serif;
+  }
+  .font-body {
+    font-family: "Mona Sans", sans-serif;
+  }
+  .font-mono {
+    font-family: "Geist Mono", monospace;
+  }
+
+  .neon-cyan {
+    color: oklch(var(--neon-cyan));
+  }
+  .neon-magenta {
+    color: oklch(var(--neon-magenta));
+  }
+  .neon-lime {
+    color: oklch(var(--neon-lime));
+  }
+  .neon-amber {
+    color: oklch(var(--neon-amber));
+  }
+
+  .neon-glow-cyan {
+    text-shadow: 0 0 10px oklch(var(--neon-cyan) / 0.8), 0 0 30px oklch(var(--neon-cyan) / 0.4);
+  }
+  .neon-glow-magenta {
+    text-shadow: 0 0 10px oklch(var(--neon-magenta) / 0.8), 0 0 30px oklch(var(--neon-magenta) / 0.4);
+  }
+  .neon-glow-lime {
+    text-shadow: 0 0 10px oklch(var(--neon-lime) / 0.8), 0 0 30px oklch(var(--neon-lime) / 0.4);
+  }
+
+  .border-neon-cyan {
+    border-color: oklch(var(--neon-cyan) / 0.4);
+  }
+  .border-neon-magenta {
+    border-color: oklch(var(--neon-magenta) / 0.4);
+  }
+
+  .bg-neon-cyan\/10 {
+    background-color: oklch(var(--neon-cyan) / 0.1);
+  }
+  .bg-neon-magenta\/10 {
+    background-color: oklch(var(--neon-magenta) / 0.1);
+  }
+  .bg-neon-lime\/10 {
+    background-color: oklch(var(--neon-lime) / 0.1);
+  }
+
+  .card-glow {
+    box-shadow:
+      0 0 0 1px oklch(var(--neon-cyan) / 0.15),
+      0 4px 20px oklch(0.08 0.01 265 / 0.8),
+      inset 0 1px 0 oklch(1 0 0 / 0.04);
+  }
+
+  .tab-active-glow {
+    box-shadow: 0 0 12px oklch(var(--neon-cyan) / 0.5);
+  }
+
+  .scanlines {
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 0.03) 2px,
+      oklch(0 0 0 / 0.03) 4px
+    );
+  }
+
+  .chassis-stripe {
+    background: linear-gradient(
+      90deg,
+      oklch(var(--neon-cyan) / 0.8) 0%,
+      oklch(var(--neon-magenta) / 0.8) 100%
+    );
+  }
+}
+
+/* Neon button glow effect */
+.btn-neon {
+  position: relative;
+  overflow: hidden;
+}
+.btn-neon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, oklch(var(--neon-cyan) / 0.1), oklch(var(--neon-magenta) / 0.1));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.btn-neon:hover::after {
+  opacity: 1;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--neon-cyan) / 0.3);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(var(--neon-cyan) / 0.6);
+}

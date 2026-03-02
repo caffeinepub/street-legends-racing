@@ -1,0 +1,584 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  ArrowLeft,
+  MapPin,
+  MessageSquare,
+  Plus,
+  Send,
+  Users,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useCallerProfile } from "../hooks/useQueries";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface Room {
+  id: string;
+  name: string;
+  maxMembers: number;
+  isCustom?: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  roomId: string;
+  senderName: string;
+  senderId: string;
+  text: string;
+  timestamp: number;
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const DEFAULT_ROOMS: Room[] = [
+  { id: "1", name: "Pink Slip Alley", maxMembers: 10 },
+  { id: "2", name: "Quarter Mile", maxMembers: 10 },
+  { id: "3", name: "Midnight Runners", maxMembers: 10 },
+  { id: "4", name: "No Mercy Lane", maxMembers: 10 },
+  { id: "5", name: "Street Kings", maxMembers: 10 },
+  { id: "6", name: "Dyno Room", maxMembers: 10 },
+  { id: "7", name: "Roll Racing", maxMembers: 10 },
+  { id: "8", name: "Import Invaders", maxMembers: 10 },
+  { id: "9", name: "Muscle Row", maxMembers: 10 },
+  { id: "10", name: "Underground", maxMembers: 10 },
+];
+
+const STORAGE_KEY_ROOMS = "sl-chat-rooms";
+const MAX_MESSAGES = 100;
+
+function storageKey(roomId: string) {
+  return `sl-chat-room-${roomId}`;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function loadCustomRooms(): Room[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ROOMS);
+    if (raw) return JSON.parse(raw) as Room[];
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+function saveCustomRooms(rooms: Room[]) {
+  localStorage.setItem(STORAGE_KEY_ROOMS, JSON.stringify(rooms));
+}
+
+function loadMessages(roomId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(storageKey(roomId));
+    if (raw) return JSON.parse(raw) as ChatMessage[];
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+function persistMessages(roomId: string, messages: ChatMessage[]) {
+  const capped = messages.slice(-MAX_MESSAGES);
+  localStorage.setItem(storageKey(roomId), JSON.stringify(capped));
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ── Room List ────────────────────────────────────────────────────────────────
+
+function RoomList({
+  rooms,
+  onJoin,
+  onCreateRoom,
+}: {
+  rooms: Room[];
+  onJoin: (room: Room) => void;
+  onCreateRoom: (name: string) => void;
+}) {
+  const [newRoomName, setNewRoomName] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleCreate = () => {
+    const name = newRoomName.trim();
+    if (!name) return;
+    onCreateRoom(name);
+    setNewRoomName("");
+    setDialogOpen(false);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-5"
+    >
+      {/* Header banner */}
+      <div
+        className="relative overflow-hidden rounded-lg border border-secondary/30 bg-card p-5"
+        style={{ boxShadow: "0 0 30px oklch(0.62 0.26 330 / 0.1)" }}
+      >
+        <div
+          className="h-[2px] w-full absolute top-0 left-0"
+          style={{
+            background:
+              "linear-gradient(90deg, oklch(0.62 0.26 330 / 0.8) 0%, oklch(0.82 0.18 195 / 0.8) 100%)",
+          }}
+        />
+        <div className="flex items-center gap-3 mb-1">
+          <MapPin
+            className="h-6 w-6 text-secondary"
+            style={{
+              filter: "drop-shadow(0 0 8px oklch(0.62 0.26 330 / 0.7))",
+            }}
+          />
+          <h2
+            className="font-display text-xl font-black text-secondary"
+            style={{ textShadow: "0 0 10px oklch(0.62 0.26 330 / 0.8)" }}
+          >
+            Taco Bell Parking Lot
+          </h2>
+        </div>
+        <p className="text-muted-foreground text-sm font-body">
+          The ultimate meet spot. Pick a room, join the crew, talk live.
+        </p>
+        <div className="flex items-center gap-2 mt-3">
+          <span
+            className="inline-block h-2 w-2 rounded-full bg-neon-lime animate-neon-pulse"
+            style={{ boxShadow: "0 0 6px oklch(0.88 0.22 120)" }}
+          />
+          <span className="text-[11px] font-mono text-muted-foreground">
+            Live — 10 slots per room
+          </span>
+        </div>
+      </div>
+
+      {/* Room list header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 neon-cyan" />
+          <h3 className="font-display font-bold text-sm uppercase tracking-widest text-foreground/70">
+            Active Rooms ({rooms.length})
+          </h3>
+        </div>
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs font-display font-bold tracking-wide border-neon-cyan/30 hover:border-neon-cyan/60 hover:bg-neon-cyan/5"
+              style={{ color: "oklch(0.82 0.18 195)" }}
+            >
+              <Plus className="mr-1.5 h-3 w-3" />
+              Create Room
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-popover border-border max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="font-display font-black neon-cyan">
+                Create a Room
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <Label className="text-[11px] uppercase tracking-widest font-mono text-foreground/60">
+                Room Name
+              </Label>
+              <Input
+                placeholder="e.g. Boost Gang HQ"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                className="bg-input border-border focus:border-neon-cyan/50 font-body"
+                autoFocus
+                maxLength={40}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={handleCreate}
+                disabled={!newRoomName.trim()}
+                className="bg-primary text-primary-foreground font-display font-bold tracking-wider hover:opacity-90 btn-neon"
+              >
+                Create Room
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Rooms grid */}
+      <div className="space-y-2">
+        {rooms.map((room, i) => (
+          <motion.div
+            key={room.id}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.04, duration: 0.2 }}
+            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-neon-cyan/30 hover:bg-muted/20 transition-all duration-200"
+          >
+            <div
+              className="h-9 w-9 rounded-md flex items-center justify-center shrink-0"
+              style={{
+                background: room.isCustom
+                  ? "oklch(0.62 0.26 330 / 0.1)"
+                  : "oklch(0.82 0.18 195 / 0.08)",
+                border: room.isCustom
+                  ? "1px solid oklch(0.62 0.26 330 / 0.3)"
+                  : "1px solid oklch(0.82 0.18 195 / 0.2)",
+              }}
+            >
+              <MessageSquare
+                className="h-4 w-4"
+                style={{
+                  color: room.isCustom
+                    ? "oklch(0.62 0.26 330)"
+                    : "oklch(0.82 0.18 195)",
+                }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-display font-bold text-sm text-foreground truncate">
+                  {room.name}
+                </span>
+                {room.isCustom && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] font-mono shrink-0"
+                    style={{
+                      borderColor: "oklch(0.62 0.26 330 / 0.4)",
+                      color: "oklch(0.62 0.26 330)",
+                    }}
+                  >
+                    CUSTOM
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[10px] font-mono text-muted-foreground">
+                Max {room.maxMembers} members
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => onJoin(room)}
+              className="h-7 px-3 text-xs font-display font-bold tracking-wide bg-primary text-primary-foreground hover:opacity-90 shrink-0"
+              style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
+            >
+              Join
+            </Button>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Chat Room ────────────────────────────────────────────────────────────────
+
+function ChatRoom({
+  room,
+  myId,
+  myName,
+  onLeave,
+}: {
+  room: Room;
+  myId: string;
+  myName: string;
+  onLeave: () => void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadMessages(room.id),
+  );
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<BroadcastChannel | null>(null);
+
+  // BroadcastChannel for cross-tab sync
+  useEffect(() => {
+    const ch = new BroadcastChannel("street-legends-chat");
+    channelRef.current = ch;
+
+    ch.onmessage = (ev: MessageEvent<ChatMessage>) => {
+      if (ev.data.roomId === room.id) {
+        setMessages((prev) => {
+          const updated = [...prev, ev.data];
+          persistMessages(room.id, updated);
+          return updated;
+        });
+      }
+    };
+
+    return () => {
+      ch.close();
+      channelRef.current = null;
+    };
+  }, [room.id]);
+
+  // Poll localStorage every 2s to catch messages from other sessions
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const fresh = loadMessages(room.id);
+      setMessages((prev) => {
+        if (fresh.length !== prev.length) return fresh;
+        return prev;
+      });
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [room.id]);
+
+  // Auto-scroll to bottom — messages drives the re-render, ref.current is safe to ignore in deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollRef is a DOM ref, messages drives re-render
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const sendMessage = () => {
+    const text = input.trim();
+    if (!text) return;
+
+    const msg: ChatMessage = {
+      id: `${myId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      roomId: room.id,
+      senderName: myName,
+      senderId: myId,
+      text,
+      timestamp: Date.now(),
+    };
+
+    const updated = [...messages, msg];
+    setMessages(updated);
+    persistMessages(room.id, updated);
+    channelRef.current?.postMessage(msg);
+    setInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="flex flex-col h-[calc(100dvh-14rem)] min-h-[400px] rounded-lg border border-secondary/30 bg-card overflow-hidden"
+      style={{ boxShadow: "0 0 30px oklch(0.62 0.26 330 / 0.1)" }}
+    >
+      {/* Room header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/20 shrink-0">
+        <button
+          type="button"
+          onClick={onLeave}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Leave room"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-display font-bold text-sm text-foreground truncate">
+            {room.name}
+          </h3>
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{
+                background: "oklch(0.88 0.22 120)",
+                boxShadow: "0 0 4px oklch(0.88 0.22 120)",
+              }}
+            />
+            <span className="text-[10px] font-mono text-muted-foreground">
+              Live chat
+            </span>
+          </div>
+        </div>
+        <Badge
+          variant="outline"
+          className="font-mono text-[10px] border-neon-cyan/30 shrink-0"
+          style={{ color: "oklch(0.82 0.18 195)" }}
+        >
+          {messages.length} msgs
+        </Badge>
+      </div>
+
+      {/* Messages */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+      >
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full py-8 space-y-3">
+            <MessageSquare className="h-10 w-10 text-muted-foreground/20" />
+            <p className="text-sm font-display font-bold text-muted-foreground">
+              No messages yet
+            </p>
+            <p className="text-xs font-mono text-muted-foreground/50">
+              Be the first to say something
+            </p>
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const isMe = msg.senderId === myId;
+            return (
+              <div
+                key={msg.id}
+                className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  {!isMe && (
+                    <span className="text-[10px] font-mono text-muted-foreground">
+                      {msg.senderName}
+                    </span>
+                  )}
+                  <span className="text-[10px] font-mono text-muted-foreground/50">
+                    {formatTime(msg.timestamp)}
+                  </span>
+                  {isMe && (
+                    <span
+                      className="text-[10px] font-mono"
+                      style={{ color: "oklch(0.82 0.18 195)" }}
+                    >
+                      You
+                    </span>
+                  )}
+                </div>
+                <div
+                  className={`max-w-[75%] px-3 py-2 rounded-lg text-sm font-body leading-relaxed ${
+                    isMe
+                      ? "rounded-tr-none text-primary-foreground"
+                      : "rounded-tl-none text-foreground/90 border border-border"
+                  }`}
+                  style={
+                    isMe
+                      ? {
+                          background: "oklch(0.82 0.18 195)",
+                          color: "oklch(0.08 0.01 265)",
+                        }
+                      : {
+                          background: "oklch(0.16 0.014 265)",
+                        }
+                  }
+                >
+                  {msg.text}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-border bg-muted/10 shrink-0">
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Say something..."
+          className="bg-input border-border focus:border-neon-cyan/50 font-body text-sm flex-1"
+          maxLength={500}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={sendMessage}
+          disabled={!input.trim()}
+          className="h-9 w-9 p-0 bg-primary text-primary-foreground hover:opacity-90 shrink-0"
+          style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Main Tab ─────────────────────────────────────────────────────────────────
+
+export function MeetTab() {
+  const { identity } = useInternetIdentity();
+  const { data: profile } = useCallerProfile();
+
+  const [customRooms, setCustomRooms] = useState<Room[]>(() =>
+    loadCustomRooms(),
+  );
+  const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+
+  const allRooms = [...DEFAULT_ROOMS, ...customRooms];
+
+  const myId =
+    identity?.getPrincipal().toString() ??
+    `guest-${Math.random().toString(36).slice(2, 8)}`;
+  const myName = profile?.name ?? "Unknown Racer";
+
+  const handleCreateRoom = useCallback(
+    (name: string) => {
+      const newRoom: Room = {
+        id: `custom-${Date.now()}`,
+        name,
+        maxMembers: 10,
+        isCustom: true,
+      };
+      const updated = [...customRooms, newRoom];
+      setCustomRooms(updated);
+      saveCustomRooms(updated);
+    },
+    [customRooms],
+  );
+
+  return (
+    <div className="space-y-0">
+      <AnimatePresence mode="wait">
+        {activeRoom ? (
+          <motion.div
+            key="chat"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <ChatRoom
+              room={activeRoom}
+              myId={myId}
+              myName={myName}
+              onLeave={() => setActiveRoom(null)}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <RoomList
+              rooms={allRooms}
+              onJoin={(room) => setActiveRoom(room)}
+              onCreateRoom={handleCreateRoom}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
