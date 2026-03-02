@@ -126,7 +126,7 @@ interface Room {
   createdBy?: string;
 }
 
-const MAX_ROOM_MEMBERS = 20;
+const MAX_ROOM_MEMBERS = 50;
 
 // Convert bigint nanoseconds timestamp to milliseconds
 function nanoToMs(nano: bigint): number {
@@ -492,7 +492,7 @@ function ChatRoomView({
     setMessages([]);
     fetchMessages();
 
-    pollingRef.current = setInterval(fetchMessages, 2000);
+    pollingRef.current = setInterval(fetchMessages, 3000);
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
@@ -739,7 +739,7 @@ export function MeetTab() {
     if (!actor || isActorFetching) return;
     setIsLoadingRooms(true);
     fetchRooms();
-    roomPollingRef.current = setInterval(fetchRooms, 5000);
+    roomPollingRef.current = setInterval(fetchRooms, 15_000);
     return () => {
       if (roomPollingRef.current) clearInterval(roomPollingRef.current);
     };

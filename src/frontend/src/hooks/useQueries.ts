@@ -33,6 +33,7 @@ export function useLeaderboard() {
       return actor.getLeaderboard();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
   });
 }
 
@@ -45,6 +46,7 @@ export function useAllRacerProfiles() {
       return actor.getAllRacerProfiles();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 60_000,
   });
 }
 
@@ -57,6 +59,7 @@ export function useActivityFeed() {
       return actor.getActivityFeed();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 20_000,
   });
 }
 
@@ -108,6 +111,7 @@ export function useTaskProgress() {
       return actor.getTaskProgress();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 30_000,
   });
 }
 
@@ -174,6 +178,7 @@ export function useGetCar(owner: Principal | null) {
       return actor.getCar(owner);
     },
     enabled: !!actor && !isFetching && !!owner,
+    staleTime: 60_000,
   });
 }
 
@@ -186,7 +191,7 @@ export function useIncomingChallenges() {
       return actor.getIncomingChallenges();
     },
     enabled: !!actor && !isFetching,
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -199,7 +204,7 @@ export function useOutgoingChallenges() {
       return actor.getOutgoingChallenges();
     },
     enabled: !!actor && !isFetching,
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -295,7 +300,7 @@ export function useGetRoomMembers(roomId: string | null) {
       return actor.getRoomMembers(roomId);
     },
     enabled: !!actor && !isFetching && !!roomId,
-    refetchInterval: 5000,
+    refetchInterval: 10_000,
   });
 }
 
@@ -308,6 +313,7 @@ export function useXpHistory() {
       return actor.getXpHistory();
     },
     enabled: !!actor && !isFetching,
+    staleTime: 30_000,
   });
 }
 
@@ -356,6 +362,7 @@ export function useGetDailyProgress(date: string) {
       return actor.getDailyProgress(date);
     },
     enabled: !!actor && !isFetching,
+    staleTime: 30_000,
   });
 }
 

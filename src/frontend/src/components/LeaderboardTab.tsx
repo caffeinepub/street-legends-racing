@@ -254,6 +254,9 @@ export function LeaderboardTab() {
     Number(b.reputation - a.reputation),
   );
 
+  const displayRacers = sorted.slice(0, 100);
+  const hasMore = sorted.length > 100;
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -336,9 +339,14 @@ export function LeaderboardTab() {
         </div>
       ) : (
         <div className="space-y-2">
-          {sorted.map((racer, i) => (
+          {displayRacers.map((racer, i) => (
             <LeaderRow key={racer.name} racer={racer} rank={i + 1} index={i} />
           ))}
+          {hasMore && (
+            <p className="text-center text-xs font-mono text-muted-foreground py-3">
+              Showing top 100 of {sorted.length} racers
+            </p>
+          )}
         </div>
       )}
     </div>
