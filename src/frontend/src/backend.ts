@@ -89,28 +89,45 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface Car {
-    model: string;
-    make: string;
-    mods: Array<string>;
-    year: bigint;
-}
 export type Time = bigint;
 export interface _CaffeineStorageRefillInformation {
     proposed_top_up_amount?: bigint;
+}
+export interface Task {
+    id: bigint;
+    title: string;
+    xpReward: bigint;
+    requiredCompletions: bigint;
+    description: string;
 }
 export type Principal = Principal;
 export interface _CaffeineStorageCreateCertificateResult {
     method: string;
     blob_hash: string;
 }
+export interface ChatRoom {
+    id: string;
+    name: string;
+    createdBy: string;
+    isCustom: boolean;
+}
 export interface RacerProfile {
+    xp: bigint;
     bio: string;
     name: string;
     wins: bigint;
     losses: bigint;
     reputation: bigint;
+    speed: bigint;
     avatarUrl?: string;
+}
+export interface RaceChallenge {
+    id: bigint;
+    status: ChallengeStatus;
+    winner?: Principal;
+    timestamp: Time;
+    challenged: Principal;
+    challenger: Principal;
 }
 export interface RaceEvent {
     winner: string;
@@ -118,9 +135,29 @@ export interface RaceEvent {
     challenged: string;
     challenger: string;
 }
+export interface ChatMessage {
+    id: bigint;
+    text: string;
+    timestamp: Time;
+    senderName: string;
+    roomId: string;
+    senderId: string;
+}
 export interface _CaffeineStorageRefillResult {
     success?: boolean;
     topped_up_amount?: bigint;
+}
+export interface Car {
+    model: string;
+    make: string;
+    mods: Array<string>;
+    year: bigint;
+}
+export enum ChallengeStatus {
+    pending = "pending",
+    completed = "completed",
+    accepted = "accepted",
+    declined = "declined"
 }
 export enum UserRole {
     admin = "admin",
@@ -138,18 +175,35 @@ export interface backendInterface {
     acceptChallenge(challengeId: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     completeChallenge(challengeId: bigint, winner: Principal): Promise<void>;
+    completeTask(): Promise<RacerProfile>;
     createChallenge(challenged: Principal): Promise<bigint>;
+    createChatRoom(name: string): Promise<void>;
     getActivityFeed(): Promise<Array<RaceEvent>>;
+    getAllRacerProfiles(): Promise<Array<{
+        principal: string;
+        profile: RacerProfile;
+    }>>;
     getCallerUserProfile(): Promise<RacerProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCar(owner: Principal): Promise<Car | null>;
+    getChatMessages(roomId: string): Promise<Array<ChatMessage>>;
+    getChatRooms(): Promise<Array<ChatRoom>>;
+    getIncomingChallenges(): Promise<Array<RaceChallenge>>;
     getLeaderboard(): Promise<Array<RacerProfile>>;
+    getOutgoingChallenges(): Promise<Array<RaceChallenge>>;
+    getTaskProgress(): Promise<{
+        tasks: Array<Task>;
+        completionsOnCurrentTask: bigint;
+        currentTaskId: bigint;
+    }>;
     getUserProfile(user: Principal): Promise<RacerProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    migrateDefaultRooms(): Promise<void>;
     registerCar(make: string, model: string, year: bigint, mods: Array<string>): Promise<void>;
-    saveCallerUserProfile(name: string, bio: string, avatarUrl: string | null): Promise<void>;
+    saveCallerUserProfile(profileData: RacerProfile): Promise<void>;
+    sendChatMessage(roomId: string, text: string): Promise<void>;
 }
-import type { Car as _Car, RacerProfile as _RacerProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
+import type { Car as _Car, ChallengeStatus as _ChallengeStatus, Principal as _Principal, RaceChallenge as _RaceChallenge, RacerProfile as _RacerProfile, Time as _Time, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _caffeineStorageBlobIsLive(arg0: Uint8Array): Promise<boolean> {
@@ -292,6 +346,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async completeTask(): Promise<RacerProfile> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.completeTask();
+                return from_candid_RacerProfile_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.completeTask();
+            return from_candid_RacerProfile_n10(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async createChallenge(arg0: Principal): Promise<bigint> {
         if (this.processError) {
             try {
@@ -303,6 +371,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.createChallenge(arg0);
+            return result;
+        }
+    }
+    async createChatRoom(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createChatRoom(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createChatRoom(arg0);
             return result;
         }
     }
@@ -320,74 +402,165 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getAllRacerProfiles(): Promise<Array<{
+        principal: string;
+        profile: RacerProfile;
+    }>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllRacerProfiles();
+                return from_candid_vec_n13(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllRacerProfiles();
+            return from_candid_vec_n13(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getCallerUserProfile(): Promise<RacerProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n14(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n14(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCar(arg0: Principal): Promise<Car | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCar(arg0);
-                return from_candid_opt_n16(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCar(arg0);
-            return from_candid_opt_n16(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getChatMessages(arg0: string): Promise<Array<ChatMessage>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getChatMessages(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getChatMessages(arg0);
+            return result;
+        }
+    }
+    async getChatRooms(): Promise<Array<ChatRoom>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getChatRooms();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getChatRooms();
+            return result;
+        }
+    }
+    async getIncomingChallenges(): Promise<Array<RaceChallenge>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getIncomingChallenges();
+                return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getIncomingChallenges();
+            return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
         }
     }
     async getLeaderboard(): Promise<Array<RacerProfile>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getLeaderboard();
-                return from_candid_vec_n17(this._uploadFile, this._downloadFile, result);
+                return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getLeaderboard();
-            return from_candid_vec_n17(this._uploadFile, this._downloadFile, result);
+            return from_candid_vec_n25(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getOutgoingChallenges(): Promise<Array<RaceChallenge>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOutgoingChallenges();
+                return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOutgoingChallenges();
+            return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getTaskProgress(): Promise<{
+        tasks: Array<Task>;
+        completionsOnCurrentTask: bigint;
+        currentTaskId: bigint;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTaskProgress();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTaskProgress();
+            return result;
         }
     }
     async getUserProfile(arg0: Principal): Promise<RacerProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n15(this._uploadFile, this._downloadFile, result);
         }
     }
     async isCallerAdmin(): Promise<boolean> {
@@ -401,6 +574,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.isCallerAdmin();
+            return result;
+        }
+    }
+    async migrateDefaultRooms(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.migrateDefaultRooms();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.migrateDefaultRooms();
             return result;
         }
     }
@@ -418,37 +605,60 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async saveCallerUserProfile(arg0: string, arg1: string, arg2: string | null): Promise<void> {
+    async saveCallerUserProfile(arg0: RacerProfile): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveCallerUserProfile(arg0, arg1, to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2));
+                const result = await this.actor.saveCallerUserProfile(to_candid_RacerProfile_n26(this._uploadFile, this._downloadFile, arg0));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveCallerUserProfile(arg0, arg1, to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2));
+            const result = await this.actor.saveCallerUserProfile(to_candid_RacerProfile_n26(this._uploadFile, this._downloadFile, arg0));
+            return result;
+        }
+    }
+    async sendChatMessage(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.sendChatMessage(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.sendChatMessage(arg0, arg1);
             return result;
         }
     }
 }
-function from_candid_RacerProfile_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _RacerProfile): RacerProfile {
-    return from_candid_record_n12(_uploadFile, _downloadFile, value);
+function from_candid_ChallengeStatus_n22(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ChallengeStatus): ChallengeStatus {
+    return from_candid_variant_n23(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n15(_uploadFile, _downloadFile, value);
+function from_candid_RaceChallenge_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _RaceChallenge): RaceChallenge {
+    return from_candid_record_n21(_uploadFile, _downloadFile, value);
+}
+function from_candid_RacerProfile_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _RacerProfile): RacerProfile {
+    return from_candid_record_n11(_uploadFile, _downloadFile, value);
+}
+function from_candid_UserRole_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n17(_uploadFile, _downloadFile, value);
 }
 function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: __CaffeineStorageRefillResult): _CaffeineStorageRefillResult {
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_RacerProfile]): RacerProfile | null {
-    return value.length === 0 ? null : from_candid_RacerProfile_n11(_uploadFile, _downloadFile, value[0]);
-}
-function from_candid_opt_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_opt_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Car]): Car | null {
+function from_candid_opt_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_RacerProfile]): RacerProfile | null {
+    return value.length === 0 ? null : from_candid_RacerProfile_n10(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Car]): Car | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n24(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [boolean]): boolean | null {
@@ -457,28 +667,70 @@ function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Ar
 function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    xp: bigint;
     bio: string;
     name: string;
     wins: bigint;
     losses: bigint;
     reputation: bigint;
+    speed: bigint;
     avatarUrl: [] | [string];
 }): {
+    xp: bigint;
     bio: string;
     name: string;
     wins: bigint;
     losses: bigint;
     reputation: bigint;
+    speed: bigint;
     avatarUrl?: string;
 } {
     return {
+        xp: value.xp,
         bio: value.bio,
         name: value.name,
         wins: value.wins,
         losses: value.losses,
         reputation: value.reputation,
-        avatarUrl: record_opt_to_undefined(from_candid_opt_n13(_uploadFile, _downloadFile, value.avatarUrl))
+        speed: value.speed,
+        avatarUrl: record_opt_to_undefined(from_candid_opt_n12(_uploadFile, _downloadFile, value.avatarUrl))
+    };
+}
+function from_candid_record_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    principal: string;
+    profile: _RacerProfile;
+}): {
+    principal: string;
+    profile: RacerProfile;
+} {
+    return {
+        principal: value.principal,
+        profile: from_candid_RacerProfile_n10(_uploadFile, _downloadFile, value.profile)
+    };
+}
+function from_candid_record_n21(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: bigint;
+    status: _ChallengeStatus;
+    winner: [] | [_Principal];
+    timestamp: _Time;
+    challenged: _Principal;
+    challenger: _Principal;
+}): {
+    id: bigint;
+    status: ChallengeStatus;
+    winner?: Principal;
+    timestamp: Time;
+    challenged: Principal;
+    challenger: Principal;
+} {
+    return {
+        id: value.id,
+        status: from_candid_ChallengeStatus_n22(_uploadFile, _downloadFile, value.status),
+        winner: record_opt_to_undefined(from_candid_opt_n24(_uploadFile, _downloadFile, value.winner)),
+        timestamp: value.timestamp,
+        challenged: value.challenged,
+        challenger: value.challenger
     };
 }
 function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -493,7 +745,7 @@ function from_candid_record_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint
         topped_up_amount: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.topped_up_amount))
     };
 }
-function from_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;
@@ -502,8 +754,34 @@ function from_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Ui
 }): UserRole {
     return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
 }
-function from_candid_vec_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_RacerProfile>): Array<RacerProfile> {
-    return value.map((x)=>from_candid_RacerProfile_n11(_uploadFile, _downloadFile, x));
+function from_candid_variant_n23(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    pending: null;
+} | {
+    completed: null;
+} | {
+    accepted: null;
+} | {
+    declined: null;
+}): ChallengeStatus {
+    return "pending" in value ? ChallengeStatus.pending : "completed" in value ? ChallengeStatus.completed : "accepted" in value ? ChallengeStatus.accepted : "declined" in value ? ChallengeStatus.declined : value;
+}
+function from_candid_vec_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<{
+    principal: string;
+    profile: _RacerProfile;
+}>): Array<{
+    principal: string;
+    profile: RacerProfile;
+}> {
+    return value.map((x)=>from_candid_record_n14(_uploadFile, _downloadFile, x));
+}
+function from_candid_vec_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_RaceChallenge>): Array<RaceChallenge> {
+    return value.map((x)=>from_candid_RaceChallenge_n20(_uploadFile, _downloadFile, x));
+}
+function from_candid_vec_n25(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_RacerProfile>): Array<RacerProfile> {
+    return value.map((x)=>from_candid_RacerProfile_n10(_uploadFile, _downloadFile, x));
+}
+function to_candid_RacerProfile_n26(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: RacerProfile): _RacerProfile {
+    return to_candid_record_n27(_uploadFile, _downloadFile, value);
 }
 function to_candid_UserRole_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n9(_uploadFile, _downloadFile, value);
@@ -514,8 +792,35 @@ function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: Exte
 function to_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation | null): [] | [__CaffeineStorageRefillInformation] {
     return value === null ? candid_none() : candid_some(to_candid__CaffeineStorageRefillInformation_n2(_uploadFile, _downloadFile, value));
 }
-function to_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
-    return value === null ? candid_none() : candid_some(value);
+function to_candid_record_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    xp: bigint;
+    bio: string;
+    name: string;
+    wins: bigint;
+    losses: bigint;
+    reputation: bigint;
+    speed: bigint;
+    avatarUrl?: string;
+}): {
+    xp: bigint;
+    bio: string;
+    name: string;
+    wins: bigint;
+    losses: bigint;
+    reputation: bigint;
+    speed: bigint;
+    avatarUrl: [] | [string];
+} {
+    return {
+        xp: value.xp,
+        bio: value.bio,
+        name: value.name,
+        wins: value.wins,
+        losses: value.losses,
+        reputation: value.reputation,
+        speed: value.speed,
+        avatarUrl: value.avatarUrl ? candid_some(value.avatarUrl) : candid_none()
+    };
 }
 function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     proposed_top_up_amount?: bigint;

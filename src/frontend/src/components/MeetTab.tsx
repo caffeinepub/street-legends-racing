@@ -10,9 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowLeft,
+  Loader2,
   MapPin,
   MessageSquare,
   Plus,
@@ -21,8 +21,88 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import type { backendInterface } from "../backend";
+import type { ChatMessage as BackendChatMessage, ChatRoom } from "../backend.d";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useCallerProfile } from "../hooks/useQueries";
+
+// ── Taco Bell Banner ─────────────────────────────────────────────────────────
+
+function TacoBellMeetBanner() {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-xl border border-neon-magenta/40 mb-5"
+      style={{ boxShadow: "0 0 40px oklch(0.62 0.26 330 / 0.25)" }}
+    >
+      {imgFailed ? (
+        <div
+          className="w-full h-40 flex items-center justify-center"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.14 0.025 265) 0%, oklch(0.18 0.04 330 / 0.6) 60%, oklch(0.14 0.025 265) 100%)",
+          }}
+        >
+          <div className="text-center">
+            <p
+              className="font-display font-black text-3xl uppercase tracking-widest text-secondary"
+              style={{ textShadow: "0 0 20px oklch(0.62 0.26 330 / 0.9)" }}
+            >
+              TACO BELL
+            </p>
+            <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mt-1">
+              The Meet Spot
+            </p>
+          </div>
+        </div>
+      ) : (
+        <img
+          src="/assets/generated/taco-bell-meet.dim_800x400.jpg"
+          alt="Taco Bell Meet Spot"
+          className="w-full h-40 object-cover object-center"
+          loading="lazy"
+          onError={() => setImgFailed(true)}
+        />
+      )}
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/30 to-transparent pointer-events-none" />
+      {/* Label */}
+      <div className="absolute bottom-0 left-0 right-0 px-5 py-4 flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <MapPin
+              className="h-5 w-5 text-secondary"
+              style={{
+                filter: "drop-shadow(0 0 8px oklch(0.62 0.26 330 / 0.9))",
+              }}
+            />
+            <span
+              className="font-display font-black text-xl uppercase tracking-widest text-secondary"
+              style={{ textShadow: "0 0 18px oklch(0.62 0.26 330 / 0.9)" }}
+            >
+              TACO BELL PARKING LOT
+            </span>
+          </div>
+          <p className="font-body text-xs text-muted-foreground ml-7">
+            The ultimate meet spot — pick a room and talk live
+          </p>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full bg-neon-lime animate-neon-pulse"
+            style={{ boxShadow: "0 0 8px oklch(0.88 0.22 120)" }}
+          />
+          <span className="font-mono text-xs text-white/70 uppercase tracking-wide">
+            Live
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,95 +113,63 @@ interface Room {
   isCustom?: boolean;
 }
 
-interface ChatMessage {
-  id: string;
-  roomId: string;
-  senderName: string;
-  senderId: string;
-  text: string;
-  timestamp: number;
+// Convert bigint nanoseconds timestamp to milliseconds
+function nanoToMs(nano: bigint): number {
+  return Number(nano / 1_000_000n);
 }
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const DEFAULT_ROOMS: Room[] = [
-  { id: "1", name: "Pink Slip Alley", maxMembers: 10 },
-  { id: "2", name: "Quarter Mile", maxMembers: 10 },
-  { id: "3", name: "Midnight Runners", maxMembers: 10 },
-  { id: "4", name: "No Mercy Lane", maxMembers: 10 },
-  { id: "5", name: "Street Kings", maxMembers: 10 },
-  { id: "6", name: "Dyno Room", maxMembers: 10 },
-  { id: "7", name: "Roll Racing", maxMembers: 10 },
-  { id: "8", name: "Import Invaders", maxMembers: 10 },
-  { id: "9", name: "Muscle Row", maxMembers: 10 },
-  { id: "10", name: "Underground", maxMembers: 10 },
-];
-
-const STORAGE_KEY_ROOMS = "sl-chat-rooms";
-const MAX_MESSAGES = 100;
-
-function storageKey(roomId: string) {
-  return `sl-chat-room-${roomId}`;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function loadCustomRooms(): Room[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_ROOMS);
-    if (raw) return JSON.parse(raw) as Room[];
-  } catch {
-    /* ignore */
-  }
-  return [];
-}
-
-function saveCustomRooms(rooms: Room[]) {
-  localStorage.setItem(STORAGE_KEY_ROOMS, JSON.stringify(rooms));
-}
-
-function loadMessages(roomId: string): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(storageKey(roomId));
-    if (raw) return JSON.parse(raw) as ChatMessage[];
-  } catch {
-    /* ignore */
-  }
-  return [];
-}
-
-function persistMessages(roomId: string, messages: ChatMessage[]) {
-  const capped = messages.slice(-MAX_MESSAGES);
-  localStorage.setItem(storageKey(roomId), JSON.stringify(capped));
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], {
+function formatTime(tsMs: number): string {
+  return new Date(tsMs).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function backendRoomToRoom(r: ChatRoom): Room {
+  return {
+    id: r.id,
+    name: r.name,
+    maxMembers: 10,
+    isCustom: r.isCustom,
+  };
 }
 
 // ── Room List ────────────────────────────────────────────────────────────────
 
 function RoomList({
   rooms,
+  isLoading,
   onJoin,
   onCreateRoom,
+  canCreate,
 }: {
   rooms: Room[];
+  isLoading: boolean;
   onJoin: (room: Room) => void;
-  onCreateRoom: (name: string) => void;
+  onCreateRoom: (name: string) => Promise<void>;
+  canCreate: boolean;
 }) {
   const [newRoomName, setNewRoomName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const name = newRoomName.trim();
     if (!name) return;
-    onCreateRoom(name);
-    setNewRoomName("");
-    setDialogOpen(false);
+    if (!canCreate) {
+      toast.error("Login to create a room");
+      return;
+    }
+    setIsCreating(true);
+    try {
+      await onCreateRoom(name);
+      setNewRoomName("");
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to create room");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -130,52 +178,15 @@ function RoomList({
       animate={{ opacity: 1 }}
       className="space-y-5"
     >
-      {/* Header banner */}
-      <div
-        className="relative overflow-hidden rounded-lg border border-secondary/30 bg-card p-5"
-        style={{ boxShadow: "0 0 30px oklch(0.62 0.26 330 / 0.1)" }}
-      >
-        <div
-          className="h-[2px] w-full absolute top-0 left-0"
-          style={{
-            background:
-              "linear-gradient(90deg, oklch(0.62 0.26 330 / 0.8) 0%, oklch(0.82 0.18 195 / 0.8) 100%)",
-          }}
-        />
-        <div className="flex items-center gap-3 mb-1">
-          <MapPin
-            className="h-6 w-6 text-secondary"
-            style={{
-              filter: "drop-shadow(0 0 8px oklch(0.62 0.26 330 / 0.7))",
-            }}
-          />
-          <h2
-            className="font-display text-xl font-black text-secondary"
-            style={{ textShadow: "0 0 10px oklch(0.62 0.26 330 / 0.8)" }}
-          >
-            Taco Bell Parking Lot
-          </h2>
-        </div>
-        <p className="text-muted-foreground text-sm font-body">
-          The ultimate meet spot. Pick a room, join the crew, talk live.
-        </p>
-        <div className="flex items-center gap-2 mt-3">
-          <span
-            className="inline-block h-2 w-2 rounded-full bg-neon-lime animate-neon-pulse"
-            style={{ boxShadow: "0 0 6px oklch(0.88 0.22 120)" }}
-          />
-          <span className="text-[11px] font-mono text-muted-foreground">
-            Live — 10 slots per room
-          </span>
-        </div>
-      </div>
+      {/* Taco Bell Meet Spot Banner */}
+      <TacoBellMeetBanner />
 
       {/* Room list header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 neon-cyan" />
           <h3 className="font-display font-bold text-sm uppercase tracking-widest text-foreground/70">
-            Active Rooms ({rooms.length})
+            Active Rooms {isLoading ? "" : `(${rooms.length})`}
           </h3>
         </div>
 
@@ -214,9 +225,12 @@ function RoomList({
             <DialogFooter>
               <Button
                 onClick={handleCreate}
-                disabled={!newRoomName.trim()}
+                disabled={!newRoomName.trim() || isCreating}
                 className="bg-primary text-primary-foreground font-display font-bold tracking-wider hover:opacity-90 btn-neon"
               >
+                {isCreating ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
                 Create Room
               </Button>
             </DialogFooter>
@@ -224,152 +238,164 @@ function RoomList({
         </Dialog>
       </div>
 
-      {/* Rooms grid */}
-      <div className="space-y-2">
-        {rooms.map((room, i) => (
-          <motion.div
-            key={room.id}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.04, duration: 0.2 }}
-            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-neon-cyan/30 hover:bg-muted/20 transition-all duration-200"
-          >
-            <div
-              className="h-9 w-9 rounded-md flex items-center justify-center shrink-0"
-              style={{
-                background: room.isCustom
-                  ? "oklch(0.62 0.26 330 / 0.1)"
-                  : "oklch(0.82 0.18 195 / 0.08)",
-                border: room.isCustom
-                  ? "1px solid oklch(0.62 0.26 330 / 0.3)"
-                  : "1px solid oklch(0.82 0.18 195 / 0.2)",
-              }}
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12 gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+            Loading rooms...
+          </span>
+        </div>
+      ) : (
+        /* Rooms grid */
+        <div className="space-y-2">
+          {rooms.map((room, i) => (
+            <motion.div
+              key={room.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.04, duration: 0.2 }}
+              className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:border-neon-cyan/30 hover:bg-muted/20 transition-all duration-200"
             >
-              <MessageSquare
-                className="h-4 w-4"
+              <div
+                className="h-9 w-9 rounded-md flex items-center justify-center shrink-0"
                 style={{
-                  color: room.isCustom
-                    ? "oklch(0.62 0.26 330)"
-                    : "oklch(0.82 0.18 195)",
+                  background: room.isCustom
+                    ? "oklch(0.62 0.26 330 / 0.1)"
+                    : "oklch(0.82 0.18 195 / 0.08)",
+                  border: room.isCustom
+                    ? "1px solid oklch(0.62 0.26 330 / 0.3)"
+                    : "1px solid oklch(0.82 0.18 195 / 0.2)",
                 }}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-sm text-foreground truncate">
-                  {room.name}
-                </span>
-                {room.isCustom && (
-                  <Badge
-                    variant="outline"
-                    className="text-[9px] font-mono shrink-0"
-                    style={{
-                      borderColor: "oklch(0.62 0.26 330 / 0.4)",
-                      color: "oklch(0.62 0.26 330)",
-                    }}
-                  >
-                    CUSTOM
-                  </Badge>
-                )}
+              >
+                <MessageSquare
+                  className="h-4 w-4"
+                  style={{
+                    color: room.isCustom
+                      ? "oklch(0.62 0.26 330)"
+                      : "oklch(0.82 0.18 195)",
+                  }}
+                />
               </div>
-              <p className="text-[10px] font-mono text-muted-foreground">
-                Max {room.maxMembers} members
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => onJoin(room)}
-              className="h-7 px-3 text-xs font-display font-bold tracking-wide bg-primary text-primary-foreground hover:opacity-90 shrink-0"
-              style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
-            >
-              Join
-            </Button>
-          </motion.div>
-        ))}
-      </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-bold text-sm text-foreground truncate">
+                    {room.name}
+                  </span>
+                  {room.isCustom && (
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] font-mono shrink-0"
+                      style={{
+                        borderColor: "oklch(0.62 0.26 330 / 0.4)",
+                        color: "oklch(0.62 0.26 330)",
+                      }}
+                    >
+                      CUSTOM
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground">
+                  Max {room.maxMembers} members
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => onJoin(room)}
+                className="h-7 px-3 text-xs font-display font-bold tracking-wide bg-primary text-primary-foreground hover:opacity-90 shrink-0"
+                style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
+              >
+                Join
+              </Button>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
 
 // ── Chat Room ────────────────────────────────────────────────────────────────
 
-function ChatRoom({
+function ChatRoomView({
   room,
+  actor,
   myId,
-  myName,
+  isLoggedIn,
   onLeave,
 }: {
   room: Room;
+  actor: backendInterface;
   myId: string;
-  myName: string;
+  isLoggedIn: boolean;
   onLeave: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    loadMessages(room.id),
-  );
+  const [messages, setMessages] = useState<BackendChatMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<BroadcastChannel | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // BroadcastChannel for cross-tab sync
-  useEffect(() => {
-    const ch = new BroadcastChannel("street-legends-chat");
-    channelRef.current = ch;
-
-    ch.onmessage = (ev: MessageEvent<ChatMessage>) => {
-      if (ev.data.roomId === room.id) {
-        setMessages((prev) => {
-          const updated = [...prev, ev.data];
-          persistMessages(room.id, updated);
-          return updated;
-        });
-      }
-    };
-
-    return () => {
-      ch.close();
-      channelRef.current = null;
-    };
-  }, [room.id]);
-
-  // Poll localStorage every 2s to catch messages from other sessions
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const fresh = loadMessages(room.id);
-      setMessages((prev) => {
-        if (fresh.length !== prev.length) return fresh;
-        return prev;
+  // Fetch messages from backend
+  const fetchMessages = useCallback(async () => {
+    try {
+      const fetched = await actor.getChatMessages(room.id);
+      // Sort by timestamp ascending
+      const sorted = [...fetched].sort((a, b) => {
+        if (a.timestamp < b.timestamp) return -1;
+        if (a.timestamp > b.timestamp) return 1;
+        return Number(a.id - b.id);
       });
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [room.id]);
+      setMessages(sorted);
+    } catch {
+      // Silently ignore poll failures
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, [actor, room.id]);
 
-  // Auto-scroll to bottom — messages drives the re-render, ref.current is safe to ignore in deps
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollRef is a DOM ref, messages drives re-render
+  // Initial fetch + polling every 2s
+  useEffect(() => {
+    setIsLoadingMessages(true);
+    setMessages([]);
+    fetchMessages();
+
+    pollingRef.current = setInterval(fetchMessages, 2000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [fetchMessages]);
+
+  // Auto-scroll to bottom when messages change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrollRef is a stable DOM ref; messages drives re-render
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = input.trim();
     if (!text) return;
 
-    const msg: ChatMessage = {
-      id: `${myId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      roomId: room.id,
-      senderName: myName,
-      senderId: myId,
-      text,
-      timestamp: Date.now(),
-    };
+    if (!isLoggedIn) {
+      toast.error("Login to chat");
+      return;
+    }
 
-    const updated = [...messages, msg];
-    setMessages(updated);
-    persistMessages(room.id, updated);
-    channelRef.current?.postMessage(msg);
+    setIsSending(true);
     setInput("");
+    try {
+      await actor.sendChatMessage(room.id, text);
+      // Immediately re-fetch so the message appears right away
+      await fetchMessages();
+    } catch {
+      toast.error("Failed to send message");
+      setInput(text); // restore on failure
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -410,7 +436,7 @@ function ChatRoom({
               }}
             />
             <span className="text-[10px] font-mono text-muted-foreground">
-              Live chat
+              Live · on-chain
             </span>
           </div>
         </div>
@@ -428,7 +454,14 @@ function ChatRoom({
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
       >
-        {messages.length === 0 ? (
+        {isLoadingMessages ? (
+          <div className="flex flex-col items-center justify-center h-full py-8 gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/40" />
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest">
+              Loading messages...
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-8 space-y-3">
             <MessageSquare className="h-10 w-10 text-muted-foreground/20" />
             <p className="text-sm font-display font-bold text-muted-foreground">
@@ -441,19 +474,20 @@ function ChatRoom({
         ) : (
           messages.map((msg) => {
             const isMe = msg.senderId === myId;
+            const tsMs = nanoToMs(msg.timestamp);
             return (
               <div
-                key={msg.id}
+                key={String(msg.id)}
                 className={`flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
               >
                 <div className="flex items-center gap-1.5">
                   {!isMe && (
                     <span className="text-[10px] font-mono text-muted-foreground">
-                      {msg.senderName}
+                      {msg.senderName || msg.senderId.slice(0, 8)}
                     </span>
                   )}
                   <span className="text-[10px] font-mono text-muted-foreground/50">
-                    {formatTime(msg.timestamp)}
+                    {formatTime(tsMs)}
                   </span>
                   {isMe && (
                     <span
@@ -491,24 +525,37 @@ function ChatRoom({
 
       {/* Input */}
       <div className="flex items-center gap-2 px-4 py-3 border-t border-border bg-muted/10 shrink-0">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Say something..."
-          className="bg-input border-border focus:border-neon-cyan/50 font-body text-sm flex-1"
-          maxLength={500}
-        />
-        <Button
-          type="button"
-          size="sm"
-          onClick={sendMessage}
-          disabled={!input.trim()}
-          className="h-9 w-9 p-0 bg-primary text-primary-foreground hover:opacity-90 shrink-0"
-          style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        {isLoggedIn ? (
+          <>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Say something..."
+              className="bg-input border-border focus:border-neon-cyan/50 font-body text-sm flex-1"
+              maxLength={500}
+              disabled={isSending}
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={sendMessage}
+              disabled={!input.trim() || isSending}
+              className="h-9 w-9 p-0 bg-primary text-primary-foreground hover:opacity-90 shrink-0"
+              style={{ boxShadow: "0 0 10px oklch(0.82 0.18 195 / 0.2)" }}
+            >
+              {isSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </>
+        ) : (
+          <p className="text-xs font-mono text-muted-foreground text-center w-full py-1">
+            Login to chat in this room
+          </p>
+        )}
       </div>
     </motion.div>
   );
@@ -519,33 +566,62 @@ function ChatRoom({
 export function MeetTab() {
   const { identity } = useInternetIdentity();
   const { data: profile } = useCallerProfile();
+  const { actor, isFetching: isActorFetching } = useActor();
 
-  const [customRooms, setCustomRooms] = useState<Room[]>(() =>
-    loadCustomRooms(),
-  );
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+  const roomPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const allRooms = [...DEFAULT_ROOMS, ...customRooms];
+  const isLoggedIn = !!identity;
+  const myId = identity?.getPrincipal().toString() ?? "";
+  // profile is used for racer name display in other components; here we just need it loaded
+  void profile;
 
-  const myId =
-    identity?.getPrincipal().toString() ??
-    `guest-${Math.random().toString(36).slice(2, 8)}`;
-  const myName = profile?.name ?? "Unknown Racer";
+  // Fetch rooms from backend
+  const fetchRooms = useCallback(async () => {
+    if (!actor) return;
+    try {
+      const fetched = await actor.getChatRooms();
+      setRooms(fetched.map(backendRoomToRoom));
+    } catch {
+      // Silently ignore poll failures
+    } finally {
+      setIsLoadingRooms(false);
+    }
+  }, [actor]);
+
+  useEffect(() => {
+    if (!actor || isActorFetching) return;
+    setIsLoadingRooms(true);
+    fetchRooms();
+    roomPollingRef.current = setInterval(fetchRooms, 5000);
+    return () => {
+      if (roomPollingRef.current) clearInterval(roomPollingRef.current);
+    };
+  }, [actor, isActorFetching, fetchRooms]);
 
   const handleCreateRoom = useCallback(
-    (name: string) => {
-      const newRoom: Room = {
-        id: `custom-${Date.now()}`,
-        name,
-        maxMembers: 10,
-        isCustom: true,
-      };
-      const updated = [...customRooms, newRoom];
-      setCustomRooms(updated);
-      saveCustomRooms(updated);
+    async (name: string) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.createChatRoom(name);
+      // Re-fetch immediately so new room appears
+      await fetchRooms();
     },
-    [customRooms],
+    [actor, fetchRooms],
   );
+
+  // Actor not ready yet — show minimal loading
+  if (!actor) {
+    return (
+      <div className="flex items-center justify-center py-12 gap-3">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+          Connecting...
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-0">
@@ -557,10 +633,11 @@ export function MeetTab() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <ChatRoom
+            <ChatRoomView
               room={activeRoom}
+              actor={actor}
               myId={myId}
-              myName={myName}
+              isLoggedIn={isLoggedIn}
               onLeave={() => setActiveRoom(null)}
             />
           </motion.div>
@@ -572,9 +649,11 @@ export function MeetTab() {
             exit={{ opacity: 0 }}
           >
             <RoomList
-              rooms={allRooms}
+              rooms={rooms}
+              isLoading={isLoadingRooms}
               onJoin={(room) => setActiveRoom(room)}
               onCreateRoom={handleCreateRoom}
+              canCreate={isLoggedIn}
             />
           </motion.div>
         )}

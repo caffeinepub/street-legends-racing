@@ -25,6 +25,16 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const Principal = IDL.Principal;
+export const RacerProfile = IDL.Record({
+  'xp' : IDL.Nat,
+  'bio' : IDL.Text,
+  'name' : IDL.Text,
+  'wins' : IDL.Nat,
+  'losses' : IDL.Nat,
+  'reputation' : IDL.Int,
+  'speed' : IDL.Nat,
+  'avatarUrl' : IDL.Opt(IDL.Text),
+});
 export const Time = IDL.Int;
 export const RaceEvent = IDL.Record({
   'winner' : IDL.Text,
@@ -32,19 +42,46 @@ export const RaceEvent = IDL.Record({
   'challenged' : IDL.Text,
   'challenger' : IDL.Text,
 });
-export const RacerProfile = IDL.Record({
-  'bio' : IDL.Text,
-  'name' : IDL.Text,
-  'wins' : IDL.Nat,
-  'losses' : IDL.Nat,
-  'reputation' : IDL.Int,
-  'avatarUrl' : IDL.Opt(IDL.Text),
-});
 export const Car = IDL.Record({
   'model' : IDL.Text,
   'make' : IDL.Text,
   'mods' : IDL.Vec(IDL.Text),
   'year' : IDL.Nat,
+});
+export const ChatMessage = IDL.Record({
+  'id' : IDL.Nat,
+  'text' : IDL.Text,
+  'timestamp' : Time,
+  'senderName' : IDL.Text,
+  'roomId' : IDL.Text,
+  'senderId' : IDL.Text,
+});
+export const ChatRoom = IDL.Record({
+  'id' : IDL.Text,
+  'name' : IDL.Text,
+  'createdBy' : IDL.Text,
+  'isCustom' : IDL.Bool,
+});
+export const ChallengeStatus = IDL.Variant({
+  'pending' : IDL.Null,
+  'completed' : IDL.Null,
+  'accepted' : IDL.Null,
+  'declined' : IDL.Null,
+});
+export const RaceChallenge = IDL.Record({
+  'id' : IDL.Nat,
+  'status' : ChallengeStatus,
+  'winner' : IDL.Opt(Principal),
+  'timestamp' : Time,
+  'challenged' : Principal,
+  'challenger' : Principal,
+});
+export const Task = IDL.Record({
+  'id' : IDL.Nat,
+  'title' : IDL.Text,
+  'xpReward' : IDL.Nat,
+  'requiredCompletions' : IDL.Nat,
+  'description' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -78,24 +115,48 @@ export const idlService = IDL.Service({
   'acceptChallenge' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'completeChallenge' : IDL.Func([IDL.Nat, Principal], [], []),
+  'completeTask' : IDL.Func([], [RacerProfile], []),
   'createChallenge' : IDL.Func([Principal], [IDL.Nat], []),
+  'createChatRoom' : IDL.Func([IDL.Text], [], []),
   'getActivityFeed' : IDL.Func([], [IDL.Vec(RaceEvent)], ['query']),
+  'getAllRacerProfiles' : IDL.Func(
+      [],
+      [
+        IDL.Vec(
+          IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+        ),
+      ],
+      ['query'],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(RacerProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCar' : IDL.Func([Principal], [IDL.Opt(Car)], ['query']),
+  'getChatMessages' : IDL.Func([IDL.Text], [IDL.Vec(ChatMessage)], ['query']),
+  'getChatRooms' : IDL.Func([], [IDL.Vec(ChatRoom)], ['query']),
+  'getIncomingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
   'getLeaderboard' : IDL.Func([], [IDL.Vec(RacerProfile)], ['query']),
+  'getOutgoingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
+  'getTaskProgress' : IDL.Func(
+      [],
+      [
+        IDL.Record({
+          'tasks' : IDL.Vec(Task),
+          'completionsOnCurrentTask' : IDL.Nat,
+          'currentTaskId' : IDL.Nat,
+        }),
+      ],
+      ['query'],
+    ),
   'getUserProfile' : IDL.Func([Principal], [IDL.Opt(RacerProfile)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'migrateDefaultRooms' : IDL.Func([], [], []),
   'registerCar' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text)],
       [],
       [],
     ),
-  'saveCallerUserProfile' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-      [],
-      [],
-    ),
+  'saveCallerUserProfile' : IDL.Func([RacerProfile], [], []),
+  'sendChatMessage' : IDL.Func([IDL.Text, IDL.Text], [], []),
 });
 
 export const idlInitArgs = [];
@@ -118,6 +179,16 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const Principal = IDL.Principal;
+  const RacerProfile = IDL.Record({
+    'xp' : IDL.Nat,
+    'bio' : IDL.Text,
+    'name' : IDL.Text,
+    'wins' : IDL.Nat,
+    'losses' : IDL.Nat,
+    'reputation' : IDL.Int,
+    'speed' : IDL.Nat,
+    'avatarUrl' : IDL.Opt(IDL.Text),
+  });
   const Time = IDL.Int;
   const RaceEvent = IDL.Record({
     'winner' : IDL.Text,
@@ -125,19 +196,46 @@ export const idlFactory = ({ IDL }) => {
     'challenged' : IDL.Text,
     'challenger' : IDL.Text,
   });
-  const RacerProfile = IDL.Record({
-    'bio' : IDL.Text,
-    'name' : IDL.Text,
-    'wins' : IDL.Nat,
-    'losses' : IDL.Nat,
-    'reputation' : IDL.Int,
-    'avatarUrl' : IDL.Opt(IDL.Text),
-  });
   const Car = IDL.Record({
     'model' : IDL.Text,
     'make' : IDL.Text,
     'mods' : IDL.Vec(IDL.Text),
     'year' : IDL.Nat,
+  });
+  const ChatMessage = IDL.Record({
+    'id' : IDL.Nat,
+    'text' : IDL.Text,
+    'timestamp' : Time,
+    'senderName' : IDL.Text,
+    'roomId' : IDL.Text,
+    'senderId' : IDL.Text,
+  });
+  const ChatRoom = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'createdBy' : IDL.Text,
+    'isCustom' : IDL.Bool,
+  });
+  const ChallengeStatus = IDL.Variant({
+    'pending' : IDL.Null,
+    'completed' : IDL.Null,
+    'accepted' : IDL.Null,
+    'declined' : IDL.Null,
+  });
+  const RaceChallenge = IDL.Record({
+    'id' : IDL.Nat,
+    'status' : ChallengeStatus,
+    'winner' : IDL.Opt(Principal),
+    'timestamp' : Time,
+    'challenged' : Principal,
+    'challenger' : Principal,
+  });
+  const Task = IDL.Record({
+    'id' : IDL.Nat,
+    'title' : IDL.Text,
+    'xpReward' : IDL.Nat,
+    'requiredCompletions' : IDL.Nat,
+    'description' : IDL.Text,
   });
   
   return IDL.Service({
@@ -171,28 +269,52 @@ export const idlFactory = ({ IDL }) => {
     'acceptChallenge' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'completeChallenge' : IDL.Func([IDL.Nat, Principal], [], []),
+    'completeTask' : IDL.Func([], [RacerProfile], []),
     'createChallenge' : IDL.Func([Principal], [IDL.Nat], []),
+    'createChatRoom' : IDL.Func([IDL.Text], [], []),
     'getActivityFeed' : IDL.Func([], [IDL.Vec(RaceEvent)], ['query']),
+    'getAllRacerProfiles' : IDL.Func(
+        [],
+        [
+          IDL.Vec(
+            IDL.Record({ 'principal' : IDL.Text, 'profile' : RacerProfile })
+          ),
+        ],
+        ['query'],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(RacerProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCar' : IDL.Func([Principal], [IDL.Opt(Car)], ['query']),
+    'getChatMessages' : IDL.Func([IDL.Text], [IDL.Vec(ChatMessage)], ['query']),
+    'getChatRooms' : IDL.Func([], [IDL.Vec(ChatRoom)], ['query']),
+    'getIncomingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
     'getLeaderboard' : IDL.Func([], [IDL.Vec(RacerProfile)], ['query']),
+    'getOutgoingChallenges' : IDL.Func([], [IDL.Vec(RaceChallenge)], ['query']),
+    'getTaskProgress' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'tasks' : IDL.Vec(Task),
+            'completionsOnCurrentTask' : IDL.Nat,
+            'currentTaskId' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'getUserProfile' : IDL.Func(
         [Principal],
         [IDL.Opt(RacerProfile)],
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'migrateDefaultRooms' : IDL.Func([], [], []),
     'registerCar' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat, IDL.Vec(IDL.Text)],
         [],
         [],
       ),
-    'saveCallerUserProfile' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-        [],
-        [],
-      ),
+    'saveCallerUserProfile' : IDL.Func([RacerProfile], [], []),
+    'sendChatMessage' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
 };
 

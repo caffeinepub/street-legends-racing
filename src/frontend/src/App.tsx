@@ -15,6 +15,7 @@ import {
   Loader2,
   LogOut,
   MapPin,
+  Target,
   Trophy,
   User,
   Zap,
@@ -28,10 +29,11 @@ import { LeaderboardTab } from "./components/LeaderboardTab";
 import { MeetTab } from "./components/MeetTab";
 import { ProfileModal } from "./components/ProfileModal";
 import { RaceTab } from "./components/RaceTab";
+import { TasksTab } from "./components/TasksTab";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useCallerProfile } from "./hooks/useQueries";
 
-type Tab = "feed" | "race" | "garage" | "leaderboard" | "hp" | "meet";
+type Tab = "feed" | "race" | "garage" | "leaderboard" | "hp" | "meet" | "tasks";
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "feed", label: "Feed", icon: Activity },
@@ -40,6 +42,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "leaderboard", label: "Legends", icon: Trophy },
   { id: "hp", label: "HP", icon: Gauge },
   { id: "meet", label: "Meet", icon: MapPin },
+  { id: "tasks", label: "Tasks", icon: Target },
 ];
 
 export default function App() {
@@ -187,6 +190,7 @@ export default function App() {
               {activeTab === "leaderboard" && <LeaderboardTab />}
               {activeTab === "hp" && <HpCalculatorTab />}
               {activeTab === "meet" && <MeetTab />}
+              {activeTab === "tasks" && <TasksTab />}
             </motion.div>
           </AnimatePresence>
         </div>

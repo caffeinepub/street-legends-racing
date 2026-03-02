@@ -1,6 +1,12 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Car, RaceEvent, RacerProfile } from "../backend.d";
+import type {
+  Car,
+  RaceChallenge,
+  RaceEvent,
+  RacerProfile,
+  Task,
+} from "../backend.d";
 import { useActor } from "./useActor";
 
 export function useCallerProfile() {
@@ -39,20 +45,6 @@ export function useActivityFeed() {
   });
 }
 
-export function useCallerCar() {
-  const { actor, isFetching } = useActor();
-  const { data: profile } = useCallerProfile();
-  return useQuery<Car | null>({
-    queryKey: ["callerCar"],
-    queryFn: async () => {
-      if (!actor) return null;
-      // We need to get the caller's principal - use a workaround
-      return null;
-    },
-    enabled: !!actor && !isFetching && !!profile,
-  });
-}
-
 export function useSaveProfile() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -61,17 +53,60 @@ export function useSaveProfile() {
       name,
       bio,
       avatarUrl,
+      existingProfile,
     }: {
       name: string;
       bio: string;
       avatarUrl: string | null;
+      existingProfile?: RacerProfile;
     }) => {
       if (!actor) throw new Error("Not authenticated");
-      await actor.saveCallerUserProfile(name, bio, avatarUrl);
+      const profileData: RacerProfile = {
+        name,
+        bio,
+        avatarUrl: avatarUrl ?? undefined,
+        wins: existingProfile?.wins ?? 0n,
+        losses: existingProfile?.losses ?? 0n,
+        reputation: existingProfile?.reputation ?? 100n,
+        xp: existingProfile?.xp ?? 0n,
+        speed: existingProfile?.speed ?? 0n,
+      };
+      await actor.saveCallerUserProfile(profileData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["callerProfile"] });
       queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
+    },
+  });
+}
+
+export function useTaskProgress() {
+  const { actor, isFetching } = useActor();
+  return useQuery<{
+    tasks: Array<Task>;
+    completionsOnCurrentTask: bigint;
+    currentTaskId: bigint;
+  } | null>({
+    queryKey: ["taskProgress"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getTaskProgress();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCompleteTask() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Not authenticated");
+      return actor.completeTask();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["taskProgress"] });
+      queryClient.invalidateQueries({ queryKey: ["callerProfile"] });
     },
   });
 }
@@ -122,40 +157,26 @@ export function useGetCar(owner: Principal | null) {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useIncomingChallenges() {
   const { actor, isFetching } = useActor();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return useQuery<any[]>({
+  return useQuery<RaceChallenge[]>({
     queryKey: ["incomingChallenges"],
     queryFn: async () => {
       if (!actor) return [];
-      // @ts-expect-error - method added in backend but not yet reflected in generated types
-      if (typeof actor.getIncomingChallenges === "function") {
-        // @ts-expect-error
-        return actor.getIncomingChallenges();
-      }
-      return [];
+      return actor.getIncomingChallenges();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 10_000,
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useOutgoingChallenges() {
   const { actor, isFetching } = useActor();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return useQuery<any[]>({
+  return useQuery<RaceChallenge[]>({
     queryKey: ["outgoingChallenges"],
     queryFn: async () => {
       if (!actor) return [];
-      // @ts-expect-error - method added in backend but not yet reflected in generated types
-      if (typeof actor.getOutgoingChallenges === "function") {
-        // @ts-expect-error
-        return actor.getOutgoingChallenges();
-      }
-      return [];
+      return actor.getOutgoingChallenges();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 10_000,

@@ -79,6 +79,7 @@ export function ProfileModal({ open, onClose, profile }: ProfileModalProps) {
         name: name.trim(),
         bio: bio.trim(),
         avatarUrl,
+        existingProfile: profile,
       });
 
       toast.success(

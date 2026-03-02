@@ -24,7 +24,11 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import type { RacerProfile } from "../backend.d";
+import {
+  ChallengeStatus,
+  type RaceChallenge,
+  type RacerProfile,
+} from "../backend.d";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAcceptChallenge,
@@ -284,17 +288,22 @@ function BrowseRacersPanel({
 
 // ── Race List (Incoming / Outgoing) ──────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function statusLabel(status: any): { label: string; color: string } {
-  if (!status || typeof status !== "object")
-    return { label: "Unknown", color: "text-muted-foreground" };
-  if ("pending" in status)
-    return { label: "Pending", color: "text-neon-amber" };
-  if ("accepted" in status) return { label: "Accepted", color: "neon-lime" };
-  if ("declined" in status)
-    return { label: "Declined", color: "text-destructive" };
-  if ("completed" in status) return { label: "Completed", color: "neon-cyan" };
-  return { label: JSON.stringify(status), color: "text-muted-foreground" };
+function statusLabel(status: ChallengeStatus): {
+  label: string;
+  color: string;
+} {
+  switch (status) {
+    case ChallengeStatus.pending:
+      return { label: "Pending", color: "text-neon-amber" };
+    case ChallengeStatus.accepted:
+      return { label: "Accepted", color: "neon-lime" };
+    case ChallengeStatus.declined:
+      return { label: "Declined", color: "text-destructive" };
+    case ChallengeStatus.completed:
+      return { label: "Completed", color: "neon-cyan" };
+    default:
+      return { label: "Unknown", color: "text-muted-foreground" };
+  }
 }
 
 function RaceList() {
@@ -363,26 +372,25 @@ function RaceList() {
               </p>
             </div>
           ) : (
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            incoming.map((c: any) => {
+            incoming.map((c: RaceChallenge) => {
               const { label, color } = statusLabel(c.status);
-              const isPending = c.status && "pending" in c.status;
+              const isPending = c.status === ChallengeStatus.pending;
               return (
                 <div
-                  key={c.id?.toString()}
+                  key={c.id.toString()}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-muted-foreground truncate">
                       From:{" "}
                       <span className="text-foreground/80">
-                        {c.challenger?.toString?.().slice(0, 12)}…
+                        {c.challenger.toString().slice(0, 12)}…
                       </span>
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                       <span className="text-[10px] font-mono text-muted-foreground">
-                        Challenge #{c.id?.toString()}
+                        Challenge #{c.id.toString()}
                       </span>
                     </div>
                   </div>
@@ -395,7 +403,7 @@ function RaceList() {
                   {isPending && (
                     <Button
                       size="sm"
-                      onClick={() => handleAccept(BigInt(c.id))}
+                      onClick={() => handleAccept(c.id)}
                       disabled={acceptChallenge.isPending}
                       className="h-7 px-2.5 text-xs font-display font-bold tracking-wide bg-secondary text-secondary-foreground hover:opacity-90 shrink-0"
                       style={{
@@ -454,25 +462,24 @@ function RaceList() {
               </p>
             </div>
           ) : (
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            outgoing.map((c: any) => {
+            outgoing.map((c: RaceChallenge) => {
               const { label, color } = statusLabel(c.status);
               return (
                 <div
-                  key={c.id?.toString()}
+                  key={c.id.toString()}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background/50"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-mono text-muted-foreground truncate">
                       To:{" "}
                       <span className="text-foreground/80">
-                        {c.challenged?.toString?.().slice(0, 12)}…
+                        {c.challenged.toString().slice(0, 12)}…
                       </span>
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Clock className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                       <span className="text-[10px] font-mono text-muted-foreground">
-                        Challenge #{c.id?.toString()}
+                        Challenge #{c.id.toString()}
                       </span>
                     </div>
                   </div>

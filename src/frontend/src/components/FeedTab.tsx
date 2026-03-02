@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, MapPin, Trophy, Zap } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
 import type { RaceEvent } from "../backend.d";
 import { useActivityFeed } from "../hooks/useQueries";
 
@@ -108,6 +109,44 @@ function RaceCard({ event, index }: { event: RaceEvent; index: number }) {
   );
 }
 
+function TacoBellBanner() {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (imgFailed) {
+    return (
+      <div
+        className="w-full h-48 flex items-center justify-center"
+        style={{
+          background:
+            "linear-gradient(135deg, oklch(0.14 0.025 265) 0%, oklch(0.18 0.04 330 / 0.6) 60%, oklch(0.14 0.025 265) 100%)",
+        }}
+      >
+        <div className="text-center">
+          <p
+            className="font-display font-black text-3xl uppercase tracking-widest text-secondary"
+            style={{ textShadow: "0 0 20px oklch(0.62 0.26 330 / 0.9)" }}
+          >
+            TACO BELL
+          </p>
+          <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mt-1">
+            The Meet Spot
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src="/assets/generated/taco-bell-meet.dim_800x400.jpg"
+      alt="Taco Bell Meet Spot"
+      className="w-full h-48 object-cover object-center"
+      loading="lazy"
+      onError={() => setImgFailed(true)}
+    />
+  );
+}
+
 const SKELETON_KEYS = ["sk1", "sk2", "sk3", "sk4"];
 
 function FeedSkeleton() {
@@ -139,36 +178,49 @@ export function FeedTab() {
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-lg border border-neon-magenta/30"
-        style={{ boxShadow: "0 0 30px oklch(0.62 0.26 330 / 0.15)" }}
+        className="relative overflow-hidden rounded-xl border border-neon-magenta/40"
+        style={{ boxShadow: "0 0 40px oklch(0.62 0.26 330 / 0.25)" }}
       >
-        <img
-          src="/assets/generated/taco-bell-meet.dim_800x400.jpg"
-          alt="Taco Bell Meet Spot"
-          className="w-full h-32 object-cover object-center"
-          loading="lazy"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-        <div className="absolute bottom-3 left-4 flex items-center gap-2">
-          <MapPin
-            className="h-4 w-4 text-secondary"
-            style={{
-              filter: "drop-shadow(0 0 6px oklch(0.62 0.26 330 / 0.8))",
-            }}
-          />
-          <span
-            className="font-display font-black text-sm text-secondary"
-            style={{ textShadow: "0 0 10px oklch(0.62 0.26 330 / 0.8)" }}
-          >
-            THE MEET SPOT — TACO BELL
-          </span>
-          <span className="font-mono text-xs text-muted-foreground">
-            • Live
-          </span>
-          <span
-            className="inline-block h-2 w-2 rounded-full bg-neon-lime animate-neon-pulse"
-            style={{ boxShadow: "0 0 6px oklch(0.88 0.22 120)" }}
-          />
+        {/* Image with fallback */}
+        <TacoBellBanner />
+        {/* Gradient overlay — lighter to show more image */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/30 to-transparent pointer-events-none" />
+        {/* Meet Spot label */}
+        <div className="absolute bottom-0 left-0 right-0 px-5 py-4 flex items-end justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <MapPin
+                className="h-5 w-5 text-secondary"
+                style={{
+                  filter: "drop-shadow(0 0 8px oklch(0.62 0.26 330 / 0.9))",
+                }}
+              />
+              <span
+                className="font-display font-black text-xl uppercase tracking-widest text-secondary"
+                style={{ textShadow: "0 0 18px oklch(0.62 0.26 330 / 0.9)" }}
+              >
+                THE MEET SPOT
+              </span>
+            </div>
+            <p
+              className="font-mono text-xs tracking-widest uppercase"
+              style={{
+                color: "oklch(0.88 0.22 120)",
+                textShadow: "0 0 8px oklch(0.88 0.22 120 / 0.8)",
+              }}
+            >
+              Taco Bell Parking Lot
+            </p>
+          </div>
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full bg-neon-lime animate-neon-pulse"
+              style={{ boxShadow: "0 0 8px oklch(0.88 0.22 120)" }}
+            />
+            <span className="font-mono text-xs text-white/70 uppercase tracking-wide">
+              Live
+            </span>
+          </div>
         </div>
       </motion.div>
 

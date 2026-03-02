@@ -6,6 +6,25 @@ import { motion } from "motion/react";
 import type { RacerProfile } from "../backend.d";
 import { useLeaderboard } from "../hooks/useQueries";
 
+// Badge thresholds matching TasksTab
+const BADGE_TIERS = [
+  { threshold: 20000, name: "King of the Streets" },
+  { threshold: 10000, name: "Untouchable" },
+  { threshold: 6000, name: "Street Legend" },
+  { threshold: 3000, name: "Known in the Scene" },
+  { threshold: 1500, name: "Street Racer" },
+  { threshold: 500, name: "Getting the Hang" },
+  { threshold: 0, name: "Fresh on the Streets" },
+] as const;
+
+function getBadgeName(xp: bigint): string {
+  const xpNum = Number(xp);
+  for (const tier of BADGE_TIERS) {
+    if (xpNum >= tier.threshold) return tier.name;
+  }
+  return "Fresh on the Streets";
+}
+
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) {
     return (
@@ -150,14 +169,29 @@ function LeaderRow({
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className="text-[10px] font-mono text-muted-foreground">
               {racer.wins.toString()}W – {racer.losses.toString()}L
             </span>
             <span className="text-[10px] font-mono text-muted-foreground">
               ({winRate}%)
             </span>
+            {racer.xp > 0n && (
+              <span
+                className="text-[10px] font-mono"
+                style={{ color: "oklch(0.82 0.18 195)" }}
+              >
+                ⚡ {Number(racer.speed)} spd
+              </span>
+            )}
           </div>
+          {racer.xp >= 500n && (
+            <div className="mt-0.5">
+              <span className="text-[9px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+                {getBadgeName(racer.xp)}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="text-right shrink-0">
